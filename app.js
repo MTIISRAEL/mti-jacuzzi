@@ -37,8 +37,11 @@
   var MODELS = window.MTI_MODELS || [], MODEL = {}; MODELS.forEach(function (m) { MODEL[m.code] = m; });
 
   var me = null, col = db.collection('orders'), usersCol = db.collection('users'), apCol = db.collection('approvals'), unsub = [], users = [];
+  // Serial numbers run on their own: meta/counters.serial holds the next one to hand out.
+  var counterRef = db.collection('meta').doc('counters'), FIRST_SERIAL = 9694;
+  function pad4(n) { n = String(n); while (n.length < 4) n = '0' + n; return n; }
   var TOKEN = new URLSearchParams(location.search).get('a');
-  var st = { orders: [], loaded: false, err: '', loc: '', q: '', agent: '', tab: 'open', openId: null, holdFor: null, form: false, usersOpen: false, armed: {}, busy: {}, appr: {} };
+  var st = { orders: [], loaded: false, err: '', loc: '', q: '', agent: '', tab: 'open', openId: null, holdFor: null, form: false, usersOpen: false, armed: {}, busy: {}, appr: {}, nextSerial: FIRST_SERIAL };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -158,6 +161,7 @@
       if (isOffice()) snap.docs.forEach(function (d) { var a = d.data(); if (a.status === 'approved' && a.orderId) autoApprove(a.orderId, d.id, a); });
       render();
     }, function () {}));
+    if (isOffice()) unsub.push(counterRef.onSnapshot(function (s) { var d = s.exists ? s.data() : null; st.nextSerial = d && d.serial ? d.serial : FIRST_SERIAL; var el = $('nTub'); if (el) el.value = pad4(st.nextSerial); }, function () {}));
     if (isOffice()) unsub.push(usersCol.onSnapshot(function (snap) { users = snap.docs.map(function (d) { return Object.assign({ email: d.id }, d.data()); }); st.usersDirty = true; render(); }, function () {}));
     render();
   }
@@ -278,7 +282,7 @@
     var names = AGENTS.slice(); users.forEach(function (u) { if (u.role === 'agent' && u.name && names.indexOf(u.name) < 0) names.push(u.name); });
     f.innerHTML = '<h2>הזמנה חדשה למעקב</h2><div class="grid">' +
       '<label for="nNum">מס\' הזמנה באינטגרל<input id="nNum" inputmode="numeric" autocomplete="off"></label>' +
-      '<label for="nTub">מספר סידורי (4 ספרות)<input id="nTub" inputmode="numeric" maxlength="4" autocomplete="off"></label>' +
+      '<label for="nTub">מספר סידורי (ניתן אוטומטית)<input id="nTub" readonly value="' + pad4(st.nextSerial) + '"></label>' +
       '<label for="nCust">לקוח<input id="nCust" autocomplete="off"></label>' +
       '<label for="nModel">דגם אמבטיה<select id="nModel"><option value="">בחירת דגם</option>' + MODELS.map(function (m) { return '<option value="' + m.code + '">' + m.code + ' · ' + m.dims + '</option>'; }).join('') + '</select></label>' +
       '<label for="nSys">מערכת<select id="nSys"><option>BASIC</option><option>TITANIUM</option><option>אחר</option></select></label>' +
@@ -420,12 +424,17 @@
     if (ev.target.id !== 'nSave') return;
     var cust = $('nCust').value.trim(), num = $('nNum').value.trim();
     if (!cust && !num) { $('nErr').textContent = 'צריך לפחות שם לקוח או מספר הזמנה.'; return; }
-    if (!/^\d{4}$/.test($('nTub').value.trim())) { $('nErr').textContent = 'צריך מספר סידורי בן 4 ספרות.'; return; }
     var agentName = $('nAgent').value, ag = users.find(function (u) { return u.role === 'agent' && u.name === agentName; }), ev0 = event('request');
     ev.target.disabled = true;
     try {
-      await col.add({ num: num, customer: cust, model: $('nModel').value, system: $('nSys').value, panel: $('nPanel').checked, notes: $('nNotes').value.trim(), store: $('nStore').value.trim(), tubNum: $('nTub').value.trim(), phone: $('nPhone').value.trim(), custEmail: $('nEmail').value.trim(), approvalToken: newToken(),
-        agentEmail: ag ? ag.email : '', agent: agentName, stage: 'request', stageAt: ev0.at, hold: null, history: [ev0], createdAt: ev0.at });
+      var order = { num: num, customer: cust, model: $('nModel').value, system: $('nSys').value, panel: $('nPanel').checked, notes: $('nNotes').value.trim(), store: $('nStore').value.trim(), phone: $('nPhone').value.trim(), custEmail: $('nEmail').value.trim(), approvalToken: newToken(),
+        agentEmail: ag ? ag.email : '', agent: agentName, stage: 'request', stageAt: ev0.at, hold: null, history: [ev0], createdAt: ev0.at };
+      // take the next serial and save the order together, so two people opening orders at once never get the same number
+      await db.runTransaction(async function (tx) {
+        var s = await tx.get(counterRef), n = s.exists && s.data().serial ? s.data().serial : FIRST_SERIAL;
+        order.tubNum = pad4(n);
+        tx.set(col.doc(), order); tx.set(counterRef, { serial: n + 1 });
+      });
       st.form = false; render();
     } catch (e) { ev.target.disabled = false; $('nErr').textContent = 'ההזמנה לא נשמרה. נסו שוב.'; }
   });
