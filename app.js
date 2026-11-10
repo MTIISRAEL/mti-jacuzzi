@@ -1,5 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
+  var APP_VERSION = '20261110-075711';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -58,10 +59,10 @@
   }
   function addWork(from, n) { var d = new Date(from.getFullYear(), from.getMonth(), from.getDate()), g = 0; while (n > 0 && g++ < 400) { d.setDate(d.getDate() + 1); if (isWork(d)) n--; } while (!isWork(d) && g++ < 400) d.setDate(d.getDate() + 1); return d; }
   function info(o, now) {
-    var i = IDX[o.stage]; if (i == null) i = 0;
-    var s = STAGES[i], el = workDays(o.stageAt, now), late = s.k !== 'delivered' && el > s.t, rem = Math.max(0, s.t - el);
+    var i = IDX[o.stage], unknown = i == null; if (unknown) i = 0; // a stage this screen does not know: it is running an older version
+    var s = unknown ? { k: o.stage, n: 'שלב חדש, צריך לרענן את הדף', loc: 'a1', who: '', roles: [], t: 99, done: '' } : STAGES[i], el = workDays(o.stageAt, now), late = s.k !== 'delivered' && el > s.t, rem = Math.max(0, s.t - el);
     for (var j = i + 1; j < STAGES.length; j++) rem += STAGES[j].t;
-    return { i: i, s: s, el: el, late: late, over: el - s.t, eta: addWork(now, rem), hold: !!(o.hold && o.hold.reason) };
+    return { i: i, s: s, el: el, late: late, over: el - s.t, eta: addWork(now, rem), hold: !!(o.hold && o.hold.reason), unknown: unknown };
   }
   function dayWord(n) { return n === 0 ? 'מהיום' : n === 1 ? 'יום עבודה אחד' : n + ' ימי עבודה'; }
 
@@ -71,6 +72,23 @@
   function canWrite() { return me && me.role !== 'agent'; }
   function canAct(stage) { return isAdmin() || (me && stage.roles.indexOf(me.role) > -1); }
   function canDraw(o) { return isOffice() && IDX[o.stage] <= IDX.approval; }
+
+  // ---------- staying up to date ----------
+  // version.json changes with every update of the site. A screen left open notices it and reloads itself when nothing is
+  // being typed or drawn; otherwise it shows a bar with a button.
+  var newVersion = null;
+  function hardReload() { location.replace(location.pathname + '?r=' + encodeURIComponent(newVersion || Date.now()) + (TOKEN ? '&a=' + TOKEN : '')); }
+  function busyNow() { var a = document.activeElement, tag = a && a.tagName; return st.form || st.usersOpen || !$('sketchView').hidden || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'; }
+  function checkVersion() {
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !j.v || j.v === APP_VERSION) return;
+      newVersion = j.v;
+      var tried = null; try { tried = sessionStorage.getItem('reloadedFor'); } catch (e) {}
+      if (!busyNow() && tried !== j.v) { try { sessionStorage.setItem('reloadedFor', j.v); } catch (e) {} hardReload(); return; }
+      var bar = $('updateBar'); if (bar) bar.hidden = false;
+    }).catch(function () {});
+  }
+  if (!TOKEN && !CUST_PAGE) { setTimeout(checkVersion, 4000); setInterval(checkVersion, 180000); document.addEventListener('visibilitychange', function () { if (!document.hidden) checkVersion(); }); }
 
   // ---------- customer link ----------
   // The customer opens index.html?a=<token> without signing in, sees the drawing and approves it or sends a note.
@@ -241,6 +259,7 @@
         '<button class="btn small" type="button" data-copy="' + id + '">העתקת קישור</button></div>' +
         (!ph && !o.custEmail ? '<div class="st">כדי לשלוח, מוסיפים טלפון או מייל של הלקוח ושומרים. אפשר גם להעתיק את הקישור ולשלוח ידנית.</div>' : '') + '</div>';
     }
+    if (f.unknown) return h + '<div class="issue warn">המסך הזה פועל בגרסה ישנה ולא מכיר את השלב של ההזמנה. <button class="btn small" type="button" data-reload="1">רענון</button></div></div>';
     if (!del) h += kitHtml(o, f);
     if (!del && canWrite()) {
       h += '<div class="who">מי מעדכן עכשיו: ' + f.s.who + '</div>';
@@ -392,6 +411,7 @@
       return;
     }
     var b = ev.target.closest('button'); if (!b || b.disabled) return; var d = b.dataset;
+    if (d.reload) { hardReload(); return; }
     if (d.savetub && (o = find(d.savetub))) { var tv = $('tn-' + o.id).value.trim(); if (!/^\d{4}$/.test(tv)) { $('banner').hidden = false; $('banner').textContent = 'מספר סידורי הוא 4 ספרות.'; return; } document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ tubNum: tv }); }); }
     else if (d.savecontact && (o = find(d.savecontact))) { var pv = $('ph-' + o.id).value.trim(), em = $('em-' + o.id).value.trim(); document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ phone: pv, custEmail: em }); }); }
     else if (d.copy && (o = find(d.copy))) { var link = custLink(o); (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () { b.textContent = 'הקישור הועתק'; }, function () { b.outerHTML = '<input readonly dir="ltr" value="' + esc(link) + '" onfocus="this.select()">'; }); }

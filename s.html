@@ -11,7 +11,7 @@
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&family=Rubik:wght@500;700&display=swap">
-<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="app.css?v=20261110-075711">
 </head>
 <body>
 
@@ -42,6 +42,7 @@
     </div>
   </div>
 
+  <div class="banner" id="updateBar" hidden>יש גרסה חדשה של המערכת. <button class="btn small" type="button" onclick="location.replace(location.pathname + '?r=' + Date.now())">רענון עכשיו</button></div>
   <div class="banner" id="banner" hidden></div>
   <div class="form" id="form" hidden></div>
   <div class="form" id="usersPanel" hidden></div>
@@ -71,9 +72,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js"></script>
-<script src="models.js"></script>
-<script src="sketch.js"></script>
-<script src="app.js"></script>
+<script src="firebase-config.js?v=20261110-075711"></script>
+<script src="models.js?v=20261110-075711"></script>
+<script src="sketch.js?v=20261110-075711"></script>
+<script src="app.js?v=20261110-075711"></script>
 </body>
 </html>
