@@ -28,6 +28,9 @@
   ];
   var LOCC = { a1: 'var(--ashdod)', a2: 'var(--ashdod)', bk: 'var(--barkan)', road: 'var(--road)', done: 'var(--ok)' };
   var ROLES = { admin: 'מנהל', office: 'משרד', warehouse: 'מחסן אשדוד', barkan: 'מנהל ברקן', driver: 'נהג', agent: 'סוכן' };
+  // Field agents by name. An agent who should sign in and see only their own orders is also added under Users
+  // with the role 'agent' and exactly the same name; new orders are then linked to that account.
+  var AGENTS = ['רונן', 'מתן', 'יניב', 'אסתר'];
   var HOLDS = ['חסר חלק', 'ממתין ללקוח', 'תקלה באמבטיה'];
   var DAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
   var MODELS = window.MTI_MODELS || [], MODEL = {}; MODELS.forEach(function (m) { MODEL[m.code] = m; });
@@ -268,14 +271,14 @@
   function renderForm() {
     var f = $('form'); f.hidden = !st.form; if (!st.form) { f.innerHTML = ''; return; }
     if (f.innerHTML) return;
-    var agents = users.filter(function (u) { return u.role === 'agent'; });
+    var names = AGENTS.slice(); users.forEach(function (u) { if (u.role === 'agent' && u.name && names.indexOf(u.name) < 0) names.push(u.name); });
     f.innerHTML = '<h2>הזמנה חדשה למעקב</h2><div class="grid">' +
       '<label for="nNum">מס\' הזמנה באינטגרל<input id="nNum" inputmode="numeric" autocomplete="off"></label>' +
       '<label for="nTub">מספר סידורי (4 ספרות)<input id="nTub" inputmode="numeric" maxlength="4" autocomplete="off"></label>' +
       '<label for="nCust">לקוח<input id="nCust" autocomplete="off"></label>' +
       '<label for="nModel">דגם אמבטיה<select id="nModel"><option value="">בחירת דגם</option>' + MODELS.map(function (m) { return '<option value="' + m.code + '">' + m.code + ' · ' + m.dims + '</option>'; }).join('') + '</select></label>' +
       '<label for="nSys">מערכת<select id="nSys"><option>BASIC</option><option>TITANIUM</option><option>אחר</option></select></label>' +
-      '<label for="nAgent">סוכן<select id="nAgent"><option value="">ללא סוכן</option>' + agents.map(function (a) { return '<option value="' + esc(a.email) + '">' + esc(a.name || a.email) + '</option>'; }).join('') + '</select></label>' +
+      '<label for="nAgent">סוכן<select id="nAgent"><option value="">ללא סוכן</option>' + names.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('') + '</select></label>' +
       '<label for="nStore">חנות<input id="nStore" autocomplete="off"></label>' +
       '<label for="nPhone">טלפון הלקוח<input id="nPhone" inputmode="tel" dir="ltr" autocomplete="off"></label>' +
       '<label for="nEmail">מייל הלקוח<input id="nEmail" type="email" dir="ltr" autocomplete="off"></label>' +
@@ -391,11 +394,11 @@
     var cust = $('nCust').value.trim(), num = $('nNum').value.trim();
     if (!cust && !num) { $('nErr').textContent = 'צריך לפחות שם לקוח או מספר הזמנה.'; return; }
     if (!/^\d{4}$/.test($('nTub').value.trim())) { $('nErr').textContent = 'צריך מספר סידורי בן 4 ספרות.'; return; }
-    var agentEmail = $('nAgent').value, ag = users.find(function (u) { return u.email === agentEmail; }), ev0 = event('request');
+    var agentName = $('nAgent').value, ag = users.find(function (u) { return u.role === 'agent' && u.name === agentName; }), ev0 = event('request');
     ev.target.disabled = true;
     try {
       await col.add({ num: num, customer: cust, model: $('nModel').value, system: $('nSys').value, panel: $('nPanel').checked, notes: $('nNotes').value.trim(), store: $('nStore').value.trim(), tubNum: $('nTub').value.trim(), phone: $('nPhone').value.trim(), custEmail: $('nEmail').value.trim(), approvalToken: newToken(),
-        agentEmail: agentEmail || '', agent: ag ? (ag.name || ag.email) : '', stage: 'request', stageAt: ev0.at, hold: null, history: [ev0], createdAt: ev0.at });
+        agentEmail: ag ? ag.email : '', agent: agentName, stage: 'request', stageAt: ev0.at, hold: null, history: [ev0], createdAt: ev0.at });
       st.form = false; render();
     } catch (e) { ev.target.disabled = false; $('nErr').textContent = 'ההזמנה לא נשמרה. נסו שוב.'; }
   });
