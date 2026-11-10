@@ -355,5 +355,15 @@ window.Sketch = (function () {
   }
   // True when a saved drawing has a problem that must be fixed before the customer can approve it.
   function hasBlocking(data) { return !!(data && data.blocking); }
-  return { open: open, hasBlocking: hasBlocking };
+  // The kit items that follow from a saved drawing: [{ n: name, q: quantity }]
+  function kitOf(data) {
+    if (!data) return [];
+    var c = {}, fin = data.finish === 'white' ? 'לבן' : 'אפור', out = [];
+    (data.items || []).forEach(function (i) { var k = i.type === 'jet' ? 'jet' + (i.size === 2 ? 2 : 3) : i.type; c[k] = (c[k] || 0) + 1; });
+    if (data.motor) out.push({ n: 'מנוע ' + data.motor, q: 1 });
+    [2, 3].forEach(function (z) { if (c['jet' + z]) out.push({ n: "ג'ט " + z + '" ' + fin, q: c['jet' + z] }); });
+    ['ctrl', 'air', 'service', 'faucet', 'shower'].forEach(function (t) { if (c[t]) out.push({ n: TYPES[t].name, q: c[t] }); });
+    return out;
+  }
+  return { open: open, hasBlocking: hasBlocking, kitOf: kitOf };
 })();

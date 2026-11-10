@@ -9,6 +9,7 @@
     { k: 'request',    n: 'בקשת אספקה',           loc: 'a1',   who: 'משרד',        roles: ['office'],                        t: 1, done: 'מתחילים שרטוט ומפרט' },
     { k: 'drawing',    n: 'שרטוט ומפרט',          loc: 'a1',   who: 'משרד',        roles: ['office'],                        t: 1, done: 'השרטוט נשלח ללקוח' },
     { k: 'approval',   n: 'ממתין לאישור לקוח',    loc: 'a1',   who: 'משרד',        roles: ['office'],                        t: 3, done: 'הלקוח אישר את השרטוט' },
+    { k: 'kitOrder',   n: 'הזמנת קיט למחסן',      loc: 'a1',   who: 'משרד',        roles: ['office'],                        t: 1, done: 'הזמנת הקיט הועברה למחסן' },
     { k: 'kit',        n: 'הכנת קיט במחסן',       loc: 'a1',   who: 'מחסן אשדוד',  roles: ['warehouse'],                     t: 1, done: 'הקיט מוכן והועמס לברקן' },
     { k: 'toBarkan',   n: 'בדרך לברקן',           loc: 'road', who: 'מנהל ברקן',   roles: ['barkan', 'driver'],              t: 1, done: 'התקבל בברקן' },
     { k: 'waitBarkan', n: 'ממתין לאיבזור בברקן',  loc: 'bk',   who: 'מנהל ברקן',   roles: ['barkan'],                        t: 3, done: 'התחלנו לאבזר' },
@@ -233,12 +234,15 @@
         '<button class="btn small" type="button" data-copy="' + id + '">העתקת קישור</button></div>' +
         (!ph && !o.custEmail ? '<div class="st">כדי לשלוח, מוסיפים טלפון או מייל של הלקוח ושומרים. אפשר גם להעתיק את הקישור ולשלוח ידנית.</div>' : '') + '</div>';
     }
+    if (!del) h += kitHtml(o, f);
     if (!del && canWrite()) {
       h += '<div class="who">מי מעדכן עכשיו: ' + f.s.who + '</div>';
       if (f.hold) h += '<button class="btn primary big" type="button" data-unhold="' + id + '"' + busy + '>העיכוב הוסר, ממשיכים</button>';
       else {
         if (canAct(f.s)) {
           var blockTxt = '';
+          if (f.s.k === 'kitOrder' && !kitDraft(o).length) blockTxt = 'הרשימה ריקה. מוסיפים לפחות פריט אחד.';
+          if (f.s.k === 'kit' && o.kitList && o.kitList.some(function (x) { return !x.done; })) blockTxt = 'מסמנים קודם את כל הפריטים ברשימה.';
           if (f.s.k === 'approval' && MODEL[o.model]) { if (!o.sketch) blockTxt = 'אי אפשר לאשר לפני שיש שרטוט.'; else if (o.sketchBlocking) blockTxt = 'בשרטוט יש בעיה מסומנת באדום. צריך לתקן לפני אישור.'; }
           h += '<button class="btn primary big" type="button" data-next="' + id + '"' + (busy || (blockTxt ? ' disabled' : '')) + '>' + f.s.done + (f.s.k === 'pack' && o.panel ? ' (כולל פאנל)' : '') + '</button>';
           if (blockTxt) h += '<div class="who">' + blockTxt + '</div>';
@@ -322,15 +326,34 @@
     if (failed) { $('banner').hidden = false; $('banner').textContent = 'העדכון לא נשמר. ייתכן שאין הרשאה או שאין חיבור. נסו שוב.'; }
   }
   function event(key, note) { var ev = { s: key, at: new Date().toISOString(), by: me.email, byName: me.name || me.email }; if (note) ev.note = note; return ev; }
-  function move(o, key, note) { var ev = event(key, note); return col.doc(o.id).update({ stage: key, stageAt: ev.at, hold: null, history: (o.history || []).concat([ev]) }); }
+  function move(o, key, note, extra) { var ev = event(key, note), u = { stage: key, stageAt: ev.at, hold: null, history: (o.history || []).concat([ev]) }; if (extra) Object.keys(extra).forEach(function (k) { u[k] = extra[k]; }); return col.doc(o.id).update(u); }
+  // Kit order: what the warehouse has to pick. Until the office hands it over it follows the drawing plus lines the
+  // office added by hand; at hand-over it is frozen into o.kitList, where the warehouse ticks each line.
+  function kitDraft(o) { var l = Sketch.kitOf(o.sketch); return l.concat((o.kitExtra || []).map(function (x, i) { return { n: x.n, q: x.q, extra: i }; })); }
+  function kitHtml(o, f) {
+    var id = esc(o.id), k = f.s.k, h = '';
+    if (k === 'kitOrder' && isOffice()) {
+      var lines = kitDraft(o);
+      h += '<div class="kitbox"><strong>הזמנת קיט למחסנאי</strong>' + (o.sketch ? '' : '<div class="st">אין שרטוט שמור, אז הרשימה לא נגזרת אוטומטית. מוסיפים פריטים ידנית.</div>') +
+        '<ul class="kitlist">' + lines.map(function (x) { return '<li><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + '</span>' + (x.extra != null ? '<button class="btn small danger" type="button" data-kitdel="' + id + '" data-i="' + x.extra + '">הסר</button>' : '') + '</li>'; }).join('') + '</ul>' +
+        '<div class="row"><input id="kn-' + id + '" placeholder="פריט נוסף" aria-label="פריט נוסף" autocomplete="off"><input id="kq-' + id + '" class="qty" inputmode="numeric" value="1" aria-label="כמות"><button class="btn small" type="button" data-kitadd="' + id + '">הוספה</button></div></div>';
+    } else if (o.kitList && o.kitList.length && IDX[k] >= IDX.kit && IDX[k] <= IDX.fitting) {
+      var can = k === 'kit' && canAct(f.s), left = o.kitList.filter(function (x) { return !x.done; }).length;
+      h += '<div class="kitbox"><strong>' + (k === 'kit' ? 'רשימת הקיט להכנה' : 'הקיט שנשלח') + '</strong>' + (k === 'kit' ? '<div class="st">' + (left ? 'מסמנים כל פריט שנכנס לקיט. נשארו ' + left + '.' : 'כל הפריטים בקיט.') + '</div>' : '') +
+        '<ul class="kitlist">' + o.kitList.map(function (x, i) {
+          var row = '<span class="chk">' + (x.done ? '✓' : '') + '</span><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + '</span>';
+          return '<li class="' + (x.done ? 'done' : '') + '">' + (can ? '<button type="button" class="kitrow" data-kittick="' + id + '" data-i="' + i + '" aria-pressed="' + !!x.done + '">' + row + '</button>' : row) + '</li>'; }).join('') + '</ul></div>';
+    }
+    return h;
+  }
   // The customer approved through the link: move the order on, once, whichever office screen sees it first.
   function autoApprove(orderId, token, a) {
     var ref = col.doc(orderId);
     db.runTransaction(async function (tx) {
       var s = await tx.get(ref); if (!s.exists) return; var o = s.data();
       if (o.stage !== 'approval' || o.approvalToken !== token) return;
-      var ev = { s: 'kit', at: new Date().toISOString(), byName: 'הלקוח', note: 'אושר בקישור' + (a.answeredName ? ' על ידי ' + a.answeredName : '') };
-      tx.update(ref, { stage: 'kit', stageAt: ev.at, hold: null, history: (o.history || []).concat([ev]) });
+      var ev = { s: 'kitOrder', at: new Date().toISOString(), byName: 'הלקוח', note: 'אושר בקישור' + (a.answeredName ? ' על ידי ' + a.answeredName : '') };
+      tx.update(ref, { stage: 'kitOrder', stageAt: ev.at, hold: null, history: (o.history || []).concat([ev]) });
     }).catch(function () {});
   }
   function custAnswer(o) { var a = st.appr[o.id]; return a && a.token === o.approvalToken && IDX[o.stage] <= IDX.approval ? a : null; }
@@ -367,7 +390,11 @@
     else if (d.copy && (o = find(d.copy))) { var link = custLink(o); (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () { b.textContent = 'הקישור הועתק'; }, function () { b.outerHTML = '<input readonly dir="ltr" value="' + esc(link) + '" onfocus="this.select()">'; }); }
     else if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); }
     else if (d.sketch && (o = find(d.sketch))) { if (o.sketch || canDraw(o)) openSketch(o); }
-    else if (d.next && (o = find(d.next))) { var nx = STAGES[IDX[o.stage] + 1]; if (nx && canAct(STAGES[IDX[o.stage]])) write(o.id, function () { return move(o, nx.k); }); }
+    else if (d.next && (o = find(d.next))) { var nx = STAGES[IDX[o.stage] + 1]; if (nx && canAct(STAGES[IDX[o.stage]])) write(o.id, function () {
+      return move(o, nx.k, null, o.stage === 'kitOrder' ? { kitList: kitDraft(o).map(function (x) { return { n: x.n, q: x.q, done: false }; }) } : null); }); }
+    else if (d.kitadd && (o = find(d.kitadd))) { var kn = $('kn-' + o.id).value.trim().slice(0, 80), kq = parseInt($('kq-' + o.id).value, 10) || 1; if (!kn) return; document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ kitExtra: (o.kitExtra || []).concat([{ n: kn, q: kq }]) }); }); }
+    else if (d.kitdel && (o = find(d.kitdel))) { var ke = (o.kitExtra || []).slice(); ke.splice(+d.i, 1); write(o.id, function () { return col.doc(o.id).update({ kitExtra: ke }); }); }
+    else if (d.kittick && (o = find(d.kittick))) { var kl = (o.kitList || []).map(function (x, i) { return i === +d.i ? { n: x.n, q: x.q, done: !x.done } : x; }); write(o.id, function () { return col.doc(o.id).update({ kitList: kl }); }); }
     else if (d.fail && (o = find(d.fail))) { if (arm('fail' + o.id)) write(o.id, function () { return move(o, 'toBarkan', 'הבדיקה נכשלה, חוזר לברקן'); }); }
     else if (d.holdopen) { st.holdFor = d.holdopen; render(); }
     else if (d.hold && (o = find(d.hold))) {
