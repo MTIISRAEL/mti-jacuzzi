@@ -424,6 +424,7 @@
     if (ev.target.id !== 'nSave') return;
     var cust = $('nCust').value.trim(), num = $('nNum').value.trim();
     if (!cust && !num) { $('nErr').textContent = 'צריך לפחות שם לקוח או מספר הזמנה.'; return; }
+    var mdl = MODEL[$('nModel').value]; if (mdl && $('nSys').value === 'TITANIUM' && mdl.jb && !mdl.jt) { $('nErr').textContent = 'לפי הקטלוג אין ל-' + mdl.code + ' מערכת TITANIUM.'; return; }
     var agentName = $('nAgent').value, ag = users.find(function (u) { return u.role === 'agent' && u.name === agentName; }), ev0 = event('request');
     ev.target.disabled = true;
     try {

@@ -15,7 +15,6 @@ window.Sketch = (function () {
   };
   var ORDER = ['jet', 'suction', 'ctrl', 'air', 'motor', 'service', 'faucet', 'shower'];
   var SIDES = { top: 'אחורי', bottom: 'קדמי', left: 'שמאלי', right: 'ימני' };
-  var JETS = { BASIC: 6, TITANIUM: 10 };
   // Motor types. The motor is chosen, not drawn. The WP-300 pair is only for a jacuzzi with a control system.
   var MOTORS = ['WPPE120', 'JA120', 'JA150', 'JA200', 'WP-300-I', 'WP-300-II'];
 
@@ -35,6 +34,8 @@ window.Sketch = (function () {
   function open(host, opt) {
     var model = opt.model, W = model.w, H = model.h, system = opt.system || '';
     var tpl = TEMPLATES[model.code] || null, readOnly = !!opt.readOnly;
+    // how many jets the catalog gives this model in this system (undefined when unknown, e.g. system 'other')
+    var jetsStd = system === 'BASIC' ? model.jb : system === 'TITANIUM' ? model.jt : null;
     var uid = 0, selId = null, drag = null, armed = {}, dirty = false, saving = false;
 
     function template() {
@@ -67,14 +68,15 @@ window.Sketch = (function () {
       '<div class="row" id="skFinish"></div>' +
       '<div class="row" id="skMotorRow"><label for="skMotor">סוג מנוע:</label><select id="skMotor"></select></div>' +
       '<div class="board"><svg id="skSvg" viewBox="-20 -20 ' + (W + 40) + ' ' + (H + 32) + '" role="img" aria-label="מבט על של האמבטיה"></svg>' +
-      '<div class="legend"><span><i style="background:var(--warn)"></i>הוזז מהסטנדרט</span><span><i style="background:var(--ok)"></i>נוסף</span><span><i style="background:var(--bad)"></i>הוסר</span></div>' +
+      '<div class="legend" hidden><span><i style="background:var(--warn)"></i>הוזז מהסטנדרט</span><span><i style="background:var(--ok)"></i>נוסף</span><span><i style="background:var(--bad)"></i>הוסר</span></div>' +
       '<p class="hint" id="skHint"></p></div>' +
       '<div class="sel" id="skSel" hidden></div>' +
       '<div id="skPalWrap"><h2>הוספת פריט</h2><div class="palette" id="skPal"></div></div>' +
       '<div class="issues" id="skIssues"></div>' +
-      '<div class="panel"><h2>שינויים מהסטנדרט</h2><ul class="list" id="skChanges"></ul></div>' +
+      '<div class="panel"><h2>כיוון וקירות</h2><ul class="list" id="skChanges"></ul></div>' +
       '<div class="panel"><h2>קיט אביזרים לפי השרטוט</h2><table class="kit" id="skKit"></table></div>' +
       '<div class="panel"><label class="f wide" for="skNotes">הערות למאבזר בברקן<textarea id="skNotes" rows="2"></textarea></label></div>' +
+      '<div class="row"><button class="btn primary big" type="button" id="skSave2" hidden>שמירת השרטוט</button></div>' +
       '<div class="row"><button class="btn danger" id="skReset" type="button">איפוס לסטנדרט</button></div>' +
       '</div>';
     function $(id) { return host.querySelector('#' + id); }
@@ -113,7 +115,7 @@ window.Sketch = (function () {
       return 'translate(' + it.x.toFixed(1) + ' ' + it.y.toFixed(1) + ')' + rot;
     }
     function ringFor(it) {
-      var st = status(it), out = '', T = TYPES[it.type], sel = it.id === selId;
+      var st = '', out = '', T = TYPES[it.type], sel = it.id === selId; // change marks are not drawn; only the selection outline
       if (it.type === 'service') {
         if (st) out += '<rect x="-21.3" y="-3.5" width="42.6" height="7" rx="2" fill="none" stroke="' + statusColor(st) + '" stroke-width="1"/>';
         if (sel) out += '<rect x="-23" y="-5.2" width="46" height="10.4" rx="3" fill="none" stroke="var(--accent)" stroke-width=".7" stroke-dasharray="1.6 1.2"/>';
@@ -167,7 +169,7 @@ window.Sketch = (function () {
         '<rect x="' + (W / 2 - 13) + '" y="-17.2" width="26" height="6.4" fill="var(--surface)"/><text class="t-dim" text-anchor="middle" x="' + (W / 2) + '" y="-12.4">' + W + ' ' + CM + '</text>' +
         '<path d="M-14 0V' + H + 'M-16 0H-12M-16 ' + H + 'H-12" stroke="var(--muted)" stroke-width=".4" fill="none"/>' +
         '<rect x="-17.2" y="' + (H / 2 - 10) + '" width="6.4" height="20" fill="var(--surface)"/><text class="t-dim" text-anchor="middle" x="-12.4" y="' + (H / 2) + '" transform="rotate(-90 -12.4 ' + (H / 2) + ')">' + H + ' ' + CM + '</text>';
-      if (!opt.customer) S.removed.forEach(function (it) {
+      if (false) S.removed.forEach(function (it) {
         o += '<g data-ghost="' + it.id + '" transform="' + tf({ type: it.type, x: it.std.x, y: it.std.y, side: it.std.side }) + '"' + (readOnly ? '' : ' style="cursor:pointer"') + '>' +
           '<circle r="6.5" fill="transparent"/><circle r="3.4" fill="none" stroke="var(--bad)" stroke-width=".7" stroke-dasharray="1.4 1"/><path d="M-1.9 -1.9L1.9 1.9M1.9 -1.9L-1.9 1.9" stroke="var(--bad)" stroke-width=".8"/></g>';
       });
@@ -189,9 +191,9 @@ window.Sketch = (function () {
     function renderSel() {
       var box = $('skSel'), it = find(selId);
       if (!it) { box.hidden = true; box.innerHTML = ''; return; }
-      var st = status(it), stTxt = st === 'added' ? ' · נוסף' : st === 'moved' ? ' · הוזז ' + r1(dist(it, it.std)) + ' ' + CM + ' מהסטנדרט' : ' · במקום הסטנדרטי';
+      var st = status(it), stTxt = '';
       box.hidden = false;
-      box.innerHTML = '<div><strong>' + nameOf(it) + '</strong>' + stTxt + '<div class="where">' + where(it) + '</div></div>' + (readOnly ? '' :
+      box.innerHTML = '<div><strong>' + nameOf(it) + '</strong>' + stTxt + '</div>' + (readOnly ? '' :
         '<div class="row"><div class="nudge" aria-label="הזזה עדינה"><button class="btn" type="button" data-n="-1,0" aria-label="שמאלה">←</button><button class="btn" type="button" data-n="0,-1" aria-label="למעלה">↑</button>' +
         '<button class="btn" type="button" data-n="0,1" aria-label="למטה">↓</button><button class="btn" type="button" data-n="1,0" aria-label="ימינה">→</button></div>' +
         (it.type === 'jet' ? '<button class="btn" type="button" data-act="size">החלף ל-' + (jsize(it) === 2 ? 3 : 2) + '"</button>' : '') +
@@ -213,23 +215,20 @@ window.Sketch = (function () {
       var jets = S.items.filter(function (i) { return i.type === 'jet'; }), close = 0;
       for (var a = 0; a < jets.length; a++) for (var b = a + 1; b < jets.length; b++) if (dist(jets[a], jets[b]) < 6) close++;
       if (close) out.push(['warn', "יש ג'טים במרחק של פחות מ-6 " + CM + ' זה מזה.']);
-      if (JETS[system] && jets.length !== JETS[system]) out.push(['warn', 'במערכת ' + system + " יש " + JETS[system] + " ג'טים, ובשרטוט מסומנים " + jets.length + '.']);
+      if (jetsStd && jets.length !== jetsStd) {
+        if (S.jetOk === jets.length) out.push(['warn', "חריגה מאושרת: " + jets.length + " ג'טים במקום " + jetsStd + ' שבקטלוג.']);
+        else out.push(['bad', 'לפי הקטלוג, ב-' + model.code + ' עם ' + system + ' יש ' + jetsStd + " ג'טים. בשרטוט מסומנים " + jets.length + '.', 'jetok']);
+      }
+      if (system === 'TITANIUM' && model.jb && !model.jt) out.push(['warn', 'לפי הקטלוג אין לדגם הזה מערכת TITANIUM.']);
       return out;
     }
     function renderLists() {
       var list = issues();
-      $('skIssues').innerHTML = list.length ? list.map(function (i) { return '<div class="issue ' + i[0] + '">' + esc(i[1]) + '</div>'; }).join('') : '<div class="issue ok">השרטוט תקין: פתח השירות פונה לצד פתוח.</div>';
+      $('skIssues').innerHTML = list.length ? list.map(function (i) { return '<div class="issue ' + i[0] + '">' + esc(i[1]) + (i[2] === 'jetok' && !readOnly ? ' <button class="btn small" type="button" data-jetok="1">זו חריגה מכוונת, לאשר</button>' : '') + '</div>'; }).join('') : '<div class="issue ok">השרטוט תקין: פתח השירות פונה לצד פתוח.</div>';
+      // short summary only: which hand and which sides are walls (positions are read off the drawing itself)
       var li = [], walls = Object.keys(SIDES).filter(function (k) { return S.walls[k]; }).map(function (k) { return SIDES[k]; });
       if (model.sides) li.push('<li><span class="dot wall"></span><span>כיוון האמבטיה: ' + (S.side === 'R' ? 'ימין' : S.side === 'L' ? 'שמאל' : 'לא נבחר') + '</span></li>');
       li.push('<li><span class="dot wall"></span><span>קירות: ' + (walls.length ? walls.join(', ') : 'אין (אמבטיה חופשית)') + '</span></li>');
-      S.items.forEach(function (it) {
-        var st = status(it);
-        if (st === 'moved') li.push('<li><span class="dot moved"></span><span>' + nameOf(it) + (dist(it, it.std) > 1.5 || it.type === 'service' ? ' הוזז ' + r1(dist(it, it.std)) + ' ' + CM : ' במקום ' + it.std.size + '"') + ' · עכשיו ' + where(it) + '</span></li>');
-        if (st === 'added') li.push('<li><span class="dot added"></span><span>' + (it.type === 'jet' && !(tpl && tpl[system]) ? '' : 'נוסף ') + nameOf(it) + ' · ' + where(it) + '</span></li>');
-      });
-      S.removed.forEach(function (it) { li.push('<li><span class="dot removed"></span><span>הוסר ' + nameOf(it) + ' סטנדרטי</span></li>'); });
-      if (S.finish === 'white') li.push('<li><span class="dot added"></span><span>' + "גימור ג'טים לבן (שדרוג)" + '</span></li>');
-      if (li.length === (model.sides ? 2 : 1)) li.push('<li class="empty">אין שינויים מהתבנית הסטנדרטית.</li>');
       $('skChanges').innerHTML = li.join('');
       function counts2(items) { var c = {}; items.forEach(function (i) { var k = i.type === 'jet' ? 'jet' + jsize(i) : i.type; c[k] = (c[k] || 0) + 1; }); return c; }
       var c = counts2(S.items), std = counts2(template()), rows = '', fin = S.finish === 'white' ? 'לבן' : 'אפור';
@@ -259,14 +258,17 @@ window.Sketch = (function () {
       ms.innerHTML = '<option value="">בחירת מנוע</option>' + MOTORS.map(function (m) { return '<option value="' + m + '">' + m + (m.indexOf('WP-300') === 0 ? ' (עם מערכת הפעלה)' : '') + '</option>'; }).join('');
       ms.value = MOTORS.indexOf(S.motor) > -1 ? S.motor : ''; ms.disabled = readOnly;
       $('skPalWrap').hidden = readOnly;
+      var nj = S.items.filter(function (i) { return i.type === 'jet'; }).length;
+      $('skPalWrap').querySelector('h2').textContent = 'הוספת פריט' + (jetsStd ? " · ג'טים: " + nj + ' מתוך ' + jetsStd : " · ג'טים: " + nj);
       $('skPal').innerHTML = [['jet', 2], ['jet', 3], ['faucet'], ['shower'], ['service']].map(function (p) {
         var t = p[0], demo = { type: t, size: p[1] };
         var vb = t === 'service' ? '-22 -8 44 16' : t === 'motor' ? '-13 -10 26 20' : '-5 -5 10 10';
         return '<button class="btn" type="button" data-add="' + t + '"' + (p[1] ? ' data-size="' + p[1] + '"' : '') + (t === 'motor' && hasMotor ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol(demo, true) + '</svg><span>' + nameOf(demo) + '</span></button>'; }).join('');
-      $('skHint').textContent = readOnly ? (opt.readOnlyNote || 'תצוגה בלבד.') : 'גוררים פריט כדי להזיז. לוחצים על צד של האמבטיה כדי להוסיף או להסיר קיר.';
+      $('skHint').textContent = readOnly ? (opt.readOnlyNote || 'תצוגה בלבד.') : 'גוררים פריט כדי להזיז. לוחצים על צד של האמבטיה כדי להוסיף או להסיר קיר. במקלדת: Delete מוחק את הפריט המסומן, והחצים מזיזים אותו.';
       var note = $('skNote'); note.hidden = !!(tpl && tpl[system]) || readOnly;
       note.textContent = "לדגם הזה עדיין אין תבנית ג'טים סטנדרטית, אז מסמנים את הג'טים ידנית. מיקום פתח השירות הוא נקודת התחלה בלבד.";
       $('skSave').hidden = readOnly; $('skSave').disabled = saving || !dirty; $('skSave').textContent = saving ? 'שומר…' : dirty ? 'שמירת השרטוט' : 'נשמר';
+      syncSave2();
       $('skReset').hidden = readOnly; $('skReset').textContent = armed.reset ? 'ללחוץ שוב כדי לאפס' : 'איפוס לסטנדרט';
       $('skClose').textContent = armed.close ? 'לצאת בלי לשמור?' : 'חזרה ללוח';
       $('skNotes').disabled = readOnly;
@@ -310,12 +312,23 @@ window.Sketch = (function () {
         if (idx > -1) { var it = S.removed.splice(idx, 1)[0]; it.x = it.std.x; it.y = it.std.y; if (it.std.side) it.side = it.std.side; S.items.push(it); selId = it.id; touch(); } return; }
       if (!(ev.target.closest && ev.target.closest('.it'))) { selId = null; renderAll(); }
     });
+    function removeItem(it) { S.items = S.items.filter(function (i) { return i.id !== it.id; }); if (it.std) S.removed.push(it); selId = null; }
+    // keyboard: Delete or Backspace removes the selected item, arrows move it 1 cm (not while typing in a field)
+    function onKey(ev) {
+      if (readOnly || host.hidden || !host.contains(svg)) return;
+      var tag = (ev.target && ev.target.tagName) || ''; if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      var it = find(selId); if (!it) return;
+      var mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
+      if (ev.key === 'Delete' || ev.key === 'Backspace') { removeItem(it); ev.preventDefault(); touch(); }
+      else if (mv) { place(it, it.x + mv[0], it.y + mv[1]); ev.preventDefault(); touch(); }
+    }
+    document.addEventListener('keydown', onKey);
     $('skSel').addEventListener('click', function (ev) {
       var b = ev.target.closest('button'), it = find(selId); if (!b || !it || readOnly) return;
       if (b.dataset.n) { var d = b.dataset.n.split(','); place(it, it.x + (+d[0]), it.y + (+d[1])); }
       else if (b.dataset.act === 'size') { it.size = jsize(it) === 2 ? 3 : 2; }
       else if (b.dataset.act === 'back') { it.x = it.std.x; it.y = it.std.y; if (it.std.side) it.side = it.std.side; if (it.std.size) it.size = it.std.size; }
-      else if (b.dataset.act === 'del') { S.items = S.items.filter(function (i) { return i.id !== it.id; }); if (it.std) S.removed.push(it); selId = null; }
+      else if (b.dataset.act === 'del') removeItem(it);
       touch();
     });
     $('skPal').addEventListener('click', function (ev) {
@@ -338,18 +351,22 @@ window.Sketch = (function () {
       }
       S.side = b.dataset.side; touch();
     });
+    $('skIssues').addEventListener('click', function (ev) { if (readOnly || !ev.target.closest('[data-jetok]')) return; S.jetOk = S.items.filter(function (i) { return i.type === 'jet'; }).length; touch(); });
     $('skMotor').addEventListener('change', function () { if (readOnly) return; S.motor = this.value || null; touch(); });
     $('skFinish').addEventListener('click', function (ev) { var b = ev.target.closest('button[data-finish]'); if (!b || b.disabled) return; S.finish = b.dataset.finish; touch(); });
     $('skReset').addEventListener('click', function () { if (readOnly) return; if (arm('reset')) { var notes = S.notes; uid = 0; S = fresh(); S.notes = notes; selId = null; touch(); } });
     $('skNotes').value = S.notes || '';
-    $('skNotes').addEventListener('input', function () { S.notes = this.value; dirty = true; $('skSave').disabled = false; $('skSave').textContent = 'שמירת השרטוט'; });
+    // the same save button again at the bottom of the screen
+    function syncSave2() { var a = $('skSave'), b = $('skSave2'); b.hidden = a.hidden; b.disabled = a.disabled; b.textContent = a.textContent; }
+    $('skSave2').addEventListener('click', function () { $('skSave').click(); setTimeout(syncSave2, 0); });
+    $('skNotes').addEventListener('input', function () { S.notes = this.value; dirty = true; $('skSave').disabled = false; $('skSave').textContent = 'שמירת השרטוט'; syncSave2(); });
     $('skSave').addEventListener('click', async function () {
       if (saving || !dirty) return; saving = true; renderAll();
       try { await opt.onSave(JSON.parse(JSON.stringify(S)), { blocking: issues().some(function (i) { return i[0] === 'bad'; }) }); dirty = false; }
-      catch (e) { var n = $('skNote'); n.hidden = false; n.textContent = 'השרטוט לא נשמר. בדקו את החיבור ונסו שוב.'; saving = false; $('skSave').disabled = false; $('skSave').textContent = 'שמירת השרטוט'; return; }
+      catch (e) { var n = $('skNote'); n.hidden = false; n.textContent = 'השרטוט לא נשמר. בדקו את החיבור ונסו שוב.'; saving = false; setTimeout(syncSave2, 0); $('skSave').disabled = false; $('skSave').textContent = 'שמירת השרטוט'; return; }
       saving = false; renderAll();
     });
-    $('skClose').addEventListener('click', function () { if (dirty && !readOnly && !arm('close')) return; host.hidden = true; host.innerHTML = ''; if (opt.onClose) opt.onClose(); });
+    $('skClose').addEventListener('click', function () { if (dirty && !readOnly && !arm('close')) return; document.removeEventListener('keydown', onKey); host.hidden = true; host.innerHTML = ''; if (opt.onClose) opt.onClose(); });
     host.hidden = false; host.scrollTop = 0;
     renderAll();
   }
