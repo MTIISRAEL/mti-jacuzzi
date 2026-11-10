@@ -28,6 +28,8 @@ window.Sketch = (function () {
   // Parts that go into every jacuzzi kit, by jet finish (BALBOA parts; item numbers from the ERP).
   var PARTS = {
     jet:     { grey: { 2: '90510', 3: '90560' }, white: { 2: '90520', 3: '90570' } },
+    // the other jet series: PRIME (CMP) adjustable, one item number per size
+    prime:   { 2: '90001', 3: '90003' },
     button:  { grey: ['כפתור הפעלה שטוח BALBOA ניקל', '48170'], white: ['כפתור הפעלה שטוח BALBOA לבן', '48180'] },
     suction: { grey: ['יניקה 1.5" BALBOA ניקל', '48270'], white: ['יניקה 1.5" BALBOA לבן', '48280'] },
     air:     ['וסת אוויר BALBOA ניקל', '48070'],
@@ -261,7 +263,9 @@ window.Sketch = (function () {
       if (model.sides) $('skSide').innerHTML = '<span>כיוון האמבטיה:</span>' + [['R', 'ימין'], ['L', 'שמאל']].map(function (f) {
         return '<button class="btn' + (S.side === f[0] ? ' primary' : '') + '" type="button" data-side="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('') + (S.side ? '' : '<span class="who">צריך לבחור</span>');
       $('skFinish').innerHTML = '<span>' + "גימור ג'טים:" + '</span>' + [['grey', 'גרפיט · סטנדרט'], ['white', 'לבן · שדרוג']].map(function (f) {
-        return '<button class="btn' + (S.finish === f[0] ? ' primary' : '') + '" type="button" data-finish="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('');
+        return '<button class="btn' + (S.finish === f[0] ? ' primary' : '') + '" type="button" data-finish="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('') +
+        '<span>' + "סדרת ג'טים:" + '</span>' + [['balboa', 'BALBOA · סטנדרט'], ['prime', 'PRIME (CMP)']].map(function (f) {
+        return '<button class="btn' + ((S.series === 'prime' ? 'prime' : 'balboa') === f[0] ? ' primary' : '') + '" type="button" data-series="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('');
       var hasMotor = false, ms = $('skMotor');
       ms.innerHTML = '<option value="">בחירת מנוע</option>' + MOTORS.map(function (m) { return '<option value="' + m + '">' + m + ' · מק"ט ' + MOTOR_SKU[m] + (m.indexOf('WP-300') === 0 ? ' (עם מערכת הפעלה)' : '') + '</option>'; }).join('');
       ms.value = MOTORS.indexOf(S.motor) > -1 ? S.motor : ''; ms.disabled = readOnly;
@@ -372,7 +376,7 @@ window.Sketch = (function () {
       if (S.light === true && !has) selId = addLight().id; else if (S.light !== true && has) { S.items = S.items.filter(function (i) { return i.type !== 'light'; }); selId = null; }
       touch(); });
     $('skMotor').addEventListener('change', function () { if (readOnly) return; S.motor = this.value || null; touch(); });
-    $('skFinish').addEventListener('click', function (ev) { var b = ev.target.closest('button[data-finish]'); if (!b || b.disabled) return; S.finish = b.dataset.finish; touch(); });
+    $('skFinish').addEventListener('click', function (ev) { var b = ev.target.closest('button[data-finish],button[data-series]'); if (!b || b.disabled) return; if (b.dataset.series) S.series = b.dataset.series; else S.finish = b.dataset.finish; touch(); });
     $('skReset').addEventListener('click', function () { if (readOnly) return; if (arm('reset')) { var notes = S.notes; uid = 0; S = fresh(); S.notes = notes; selId = null; touch(); } });
     $('skNotes').value = S.notes || '';
     // the same save button again at the bottom of the screen
@@ -404,7 +408,9 @@ window.Sketch = (function () {
     // with a light there are two control buttons (pump + light), without it one
     out.push({ n: PARTS.button[f][0], q: data.light === true ? 2 : 1, sku: PARTS.button[f][1] });
     if (data.light === true) out.push({ n: PARTS.light[0], q: 1, sku: PARTS.light[1] });
-    [2, 3].forEach(function (z) { if (c['jet' + z]) out.push({ n: "ג'ט " + z + '" BALBOA ' + fin + ' (מסגרת ניקל)', q: c['jet' + z], sku: PARTS.jet[f][z] }); });
+    [2, 3].forEach(function (z) { if (!c['jet' + z]) return;
+      if (data.series === 'prime') out.push({ n: "ג'ט " + z + '" PRIME (CMP) מתכוונן', q: c['jet' + z], sku: PARTS.prime[z] });
+      else out.push({ n: "ג'ט " + z + '" BALBOA ' + fin + ' (מסגרת ניקל)', q: c['jet' + z], sku: PARTS.jet[f][z] }); });
     out.push({ n: PARTS.suction[f][0], q: 1, sku: PARTS.suction[f][1] });
     ['faucet', 'shower'].forEach(function (t) { if (c[t]) out.push({ n: TYPES[t].name, q: c[t], sku: '' }); });
     return out;
