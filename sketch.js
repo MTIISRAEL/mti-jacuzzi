@@ -16,6 +16,8 @@ window.Sketch = (function () {
   var ORDER = ['jet', 'suction', 'ctrl', 'air', 'motor', 'service', 'faucet', 'shower'];
   var SIDES = { top: 'אחורי', bottom: 'קדמי', left: 'שמאלי', right: 'ימני' };
   var JETS = { BASIC: 6, TITANIUM: 10 };
+  // Motor types. The motor is chosen, not drawn. The WP-300 pair is only for a jacuzzi with a control system.
+  var MOTORS = ['WPPE120', 'JA120', 'JA150', 'JA200', 'WP-300-I', 'WP-300-II'];
 
   // Standard jet layouts, measured from the catalog renders. Only MTI-114 has them so far.
   var TEMPLATES = {
@@ -63,6 +65,7 @@ window.Sketch = (function () {
       '<div class="banner" id="skNote" hidden></div>' +
       '<div class="row" id="skSide"></div>' +
       '<div class="row" id="skFinish"></div>' +
+      '<div class="row" id="skMotorRow"><label for="skMotor">סוג מנוע:</label><select id="skMotor"></select></div>' +
       '<div class="board"><svg id="skSvg" viewBox="-20 -20 ' + (W + 40) + ' ' + (H + 32) + '" role="img" aria-label="מבט על של האמבטיה"></svg>' +
       '<div class="legend"><span><i style="background:var(--warn)"></i>הוזז מהסטנדרט</span><span><i style="background:var(--ok)"></i>נוסף</span><span><i style="background:var(--bad)"></i>הוסר</span></div>' +
       '<p class="hint" id="skHint"></p></div>' +
@@ -77,7 +80,7 @@ window.Sketch = (function () {
     function $(id) { return host.querySelector('#' + id); }
     var svg = $('skSvg');
     if (opt.customer) { // the customer sees the drawing and the list of walls and changes, not the workshop panels
-      host.querySelector('.head').hidden = true; $('skIssues').hidden = true; $('skFinish').hidden = true;
+      host.querySelector('.head').hidden = true; $('skIssues').hidden = true; $('skFinish').hidden = true; $('skMotorRow').hidden = true;
       $('skKit').closest('.panel').hidden = true; $('skNotes').closest('.panel').hidden = true;
     }
 
@@ -196,6 +199,7 @@ window.Sketch = (function () {
     function issues() {
       var out = [], svc = S.items.filter(function (i) { return i.type === 'service'; }), motors = S.items.filter(function (i) { return i.type === 'motor'; });
       if (model.sides && !S.side) out.push(['bad', 'לא נבחר כיוון האמבטיה: ימין או שמאל.']);
+      if (!S.motor) out.push(['bad', 'לא נבחר סוג מנוע.']);
       if (!svc.length) out.push(['bad', 'אין פתח שירות בשרטוט.']);
       svc.forEach(function (s) { if (S.walls[s.side]) out.push(['bad', 'פתח השירות בצד ה' + SIDES[s.side] + ', ושם מסומן קיר. צריך להעביר את הפתח לצד פתוח.']); });
       if (!Object.keys(SIDES).some(function (k) { return !S.walls[k]; })) out.push(['bad', 'האמבטיה סגורה בקירות מכל ארבעת הצדדים. אין מאיפה לגשת.']);
@@ -227,6 +231,7 @@ window.Sketch = (function () {
         var d = n - s0, diff = d && tpl && tpl[system] ? '<span class="diff">' + (d > 0 ? '+' + d : d) + ' מהסטנדרט</span>' : '';
         rows += '<tr><td>' + "ג'ט " + z + '" ' + fin + diff + '</td><td class="n">' + n + '</td></tr>';
       });
+      if (S.motor) rows = '<tr><td>מנוע ' + esc(S.motor) + '</td><td class="n">1</td></tr>' + rows;
       ORDER.forEach(function (t) {
         if (t === 'jet') return;
         var n = c[t] || 0, s = std[t] || 0; if (!n && !s) return;
@@ -243,7 +248,9 @@ window.Sketch = (function () {
         return '<button class="btn' + (S.side === f[0] ? ' primary' : '') + '" type="button" data-side="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('') + (S.side ? '' : '<span class="who">צריך לבחור</span>');
       $('skFinish').innerHTML = '<span>' + "גימור ג'טים:" + '</span>' + [['grey', 'אפור · סטנדרט'], ['white', 'לבן · שדרוג']].map(function (f) {
         return '<button class="btn' + (S.finish === f[0] ? ' primary' : '') + '" type="button" data-finish="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('');
-      var hasMotor = S.items.some(function (i) { return i.type === 'motor'; });
+      var hasMotor = false, ms = $('skMotor');
+      ms.innerHTML = '<option value="">בחירת מנוע</option>' + MOTORS.map(function (m) { return '<option value="' + m + '">' + m + (m.indexOf('WP-300') === 0 ? ' (עם מערכת הפעלה)' : '') + '</option>'; }).join('');
+      ms.value = MOTORS.indexOf(S.motor) > -1 ? S.motor : ''; ms.disabled = readOnly;
       $('skPalWrap').hidden = readOnly;
       $('skPal').innerHTML = [['jet', 2], ['jet', 3], ['faucet'], ['shower'], ['service']].map(function (p) {
         var t = p[0], demo = { type: t, size: p[1] };
@@ -324,6 +331,7 @@ window.Sketch = (function () {
       }
       S.side = b.dataset.side; touch();
     });
+    $('skMotor').addEventListener('change', function () { if (readOnly) return; S.motor = this.value || null; touch(); });
     $('skFinish').addEventListener('click', function (ev) { var b = ev.target.closest('button[data-finish]'); if (!b || b.disabled) return; S.finish = b.dataset.finish; touch(); });
     $('skReset').addEventListener('click', function () { if (readOnly) return; if (arm('reset')) { var notes = S.notes; uid = 0; S = fresh(); S.notes = notes; selId = null; touch(); } });
     $('skNotes').value = S.notes || '';

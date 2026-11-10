@@ -193,3 +193,4 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 .approve textarea, .approve input { font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1.5px solid var(--line); border-radius: 9px; padding: 9px 10px; width: 100%; }
 .tubrow { flex-wrap: nowrap; } .tubrow label { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .tubrow input { font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 7px 10px; min-height: 38px; min-width: 0; flex: 1 1 80px; }
+#skMotorRow select { font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 42px; }
