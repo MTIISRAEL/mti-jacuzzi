@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261110-075711';
+  var APP_VERSION = '20261110-075853';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -355,19 +355,20 @@
   function move(o, key, note, extra) { var ev = event(key, note), u = { stage: key, stageAt: ev.at, hold: null, history: (o.history || []).concat([ev]) }; if (extra) Object.keys(extra).forEach(function (k) { u[k] = extra[k]; }); return col.doc(o.id).update(u); }
   // Kit order: what the warehouse has to pick. Until the office hands it over it follows the drawing plus lines the
   // office added by hand; at hand-over it is frozen into o.kitList, where the warehouse ticks each line.
-  function kitDraft(o) { var l = Sketch.kitOf(o.sketch); return l.concat((o.kitExtra || []).map(function (x, i) { return { n: x.n, q: x.q, extra: i }; })); }
+  function kitDraft(o) { var l = Sketch.kitOf(o.sketch); return l.concat((o.kitExtra || []).map(function (x, i) { return { n: x.n, q: x.q, sku: x.sku || '', extra: i }; })); }
+  function skuHtml(x) { return x.sku ? '<span class="sku">מק"ט ' + esc(x.sku) + '</span>' : ''; }
   function kitHtml(o, f) {
     var id = esc(o.id), k = f.s.k, h = '';
     if (k === 'kitOrder' && isOffice()) {
       var lines = kitDraft(o);
       h += '<div class="kitbox"><strong>הזמנת קיט למחסנאי</strong>' + (o.sketch ? '' : '<div class="st">אין שרטוט שמור, אז הרשימה לא נגזרת אוטומטית. מוסיפים פריטים ידנית.</div>') +
-        '<ul class="kitlist">' + lines.map(function (x) { return '<li><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + '</span>' + (x.extra != null ? '<button class="btn small danger" type="button" data-kitdel="' + id + '" data-i="' + x.extra + '">הסר</button>' : '') + '</li>'; }).join('') + '</ul>' +
-        '<div class="row"><input id="kn-' + id + '" placeholder="פריט נוסף" aria-label="פריט נוסף" autocomplete="off"><input id="kq-' + id + '" class="qty" inputmode="numeric" value="1" aria-label="כמות"><button class="btn small" type="button" data-kitadd="' + id + '">הוספה</button></div></div>';
+        '<ul class="kitlist">' + lines.map(function (x) { return '<li><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + skuHtml(x) + '</span>' + (x.extra != null ? '<button class="btn small danger" type="button" data-kitdel="' + id + '" data-i="' + x.extra + '">הסר</button>' : '') + '</li>'; }).join('') + '</ul>' +
+        '<div class="row"><input id="kn-' + id + '" placeholder="פריט נוסף" aria-label="פריט נוסף" autocomplete="off"><input id="ks-' + id + '" class="skuin" inputmode="numeric" placeholder="מק&quot;ט" aria-label="מק&quot;ט" autocomplete="off"><input id="kq-' + id + '" class="qty" inputmode="numeric" value="1" aria-label="כמות"><button class="btn small" type="button" data-kitadd="' + id + '">הוספה</button></div></div>';
     } else if (o.kitList && o.kitList.length && IDX[k] >= IDX.kit && IDX[k] <= IDX.fitting) {
       var can = k === 'kit' && canAct(f.s), left = o.kitList.filter(function (x) { return !x.done; }).length;
       h += '<div class="kitbox"><strong>' + (k === 'kit' ? 'רשימת הקיט להכנה' : 'הקיט שנשלח') + '</strong>' + (k === 'kit' ? '<div class="st">' + (left ? 'מסמנים כל פריט שנכנס לקיט. נשארו ' + left + '.' : 'כל הפריטים בקיט.') + '</div>' : '') +
         '<ul class="kitlist">' + o.kitList.map(function (x, i) {
-          var row = '<span class="chk">' + (x.done ? '✓' : '') + '</span><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + '</span>';
+          var row = '<span class="chk">' + (x.done ? '✓' : '') + '</span><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + skuHtml(x) + '</span>';
           return '<li class="' + (x.done ? 'done' : '') + '">' + (can ? '<button type="button" class="kitrow" data-kittick="' + id + '" data-i="' + i + '" aria-pressed="' + !!x.done + '">' + row + '</button>' : row) + '</li>'; }).join('') + '</ul></div>';
     }
     return h;
@@ -418,10 +419,10 @@
     else if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); }
     else if (d.sketch && (o = find(d.sketch))) { if (o.sketch || canDraw(o)) openSketch(o); }
     else if (d.next && (o = find(d.next))) { var nx = STAGES[IDX[o.stage] + 1]; if (nx && canAct(STAGES[IDX[o.stage]])) write(o.id, function () {
-      return move(o, nx.k, null, o.stage === 'kitOrder' ? { kitList: kitDraft(o).map(function (x) { return { n: x.n, q: x.q, done: false }; }) } : null); }); }
-    else if (d.kitadd && (o = find(d.kitadd))) { var kn = $('kn-' + o.id).value.trim().slice(0, 80), kq = parseInt($('kq-' + o.id).value, 10) || 1; if (!kn) return; document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ kitExtra: (o.kitExtra || []).concat([{ n: kn, q: kq }]) }); }); }
+      return move(o, nx.k, null, o.stage === 'kitOrder' ? { kitList: kitDraft(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; }) } : null); }); }
+    else if (d.kitadd && (o = find(d.kitadd))) { var kn = $('kn-' + o.id).value.trim().slice(0, 80), kq = parseInt($('kq-' + o.id).value, 10) || 1, ks = $('ks-' + o.id).value.trim().slice(0, 20); if (!kn) return; document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ kitExtra: (o.kitExtra || []).concat([{ n: kn, q: kq, sku: ks }]) }); }); }
     else if (d.kitdel && (o = find(d.kitdel))) { var ke = (o.kitExtra || []).slice(); ke.splice(+d.i, 1); write(o.id, function () { return col.doc(o.id).update({ kitExtra: ke }); }); }
-    else if (d.kittick && (o = find(d.kittick))) { var kl = (o.kitList || []).map(function (x, i) { return i === +d.i ? { n: x.n, q: x.q, done: !x.done } : x; }); write(o.id, function () { return col.doc(o.id).update({ kitList: kl }); }); }
+    else if (d.kittick && (o = find(d.kittick))) { var kl = (o.kitList || []).map(function (x, i) { return i === +d.i ? { n: x.n, q: x.q, sku: x.sku || '', done: !x.done } : x; }); write(o.id, function () { return col.doc(o.id).update({ kitList: kl }); }); }
     else if (d.fail && (o = find(d.fail))) { if (arm('fail' + o.id)) write(o.id, function () { return move(o, 'toBarkan', 'הבדיקה נכשלה, חוזר לברקן'); }); }
     else if (d.holdopen) { st.holdFor = d.holdopen; render(); }
     else if (d.hold && (o = find(d.hold))) {

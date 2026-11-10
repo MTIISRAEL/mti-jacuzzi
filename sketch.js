@@ -17,6 +17,8 @@ window.Sketch = (function () {
   var SIDES = { top: 'אחורי', bottom: 'קדמי', left: 'שמאלי', right: 'ימני' };
   // Motor types. The motor is chosen, not drawn. The WP-300 pair is only for a jacuzzi with a control system.
   var MOTORS = ['WPPE120', 'JA120', 'JA150', 'JA200', 'WP-300-I', 'WP-300-II'];
+  // Item numbers (מק"ט) in the Integral ERP, read from its item index.
+  var MOTOR_SKU = { 'WPPE120': '40480', 'JA120': '40120', 'JA150': '40150', 'JA200': '40200', 'WP-300-I': '40300', 'WP-300-II': '40320' };
 
   // Standard jet layouts, measured from the catalog renders. Only MTI-114 has them so far.
   var TEMPLATES = {
@@ -237,7 +239,7 @@ window.Sketch = (function () {
         var d = n - s0, diff = d && tpl && tpl[system] ? '<span class="diff">' + (d > 0 ? '+' + d : d) + ' מהסטנדרט</span>' : '';
         rows += '<tr><td>' + "ג'ט " + z + '" ' + fin + diff + '</td><td class="n">' + n + '</td></tr>';
       });
-      if (S.motor) rows = '<tr><td>מנוע ' + esc(S.motor) + '</td><td class="n">1</td></tr>' + rows;
+      if (S.motor) rows = '<tr><td>מנוע ' + esc(S.motor) + (MOTOR_SKU[S.motor] ? ' <span class="sku">מק"ט ' + MOTOR_SKU[S.motor] + '</span>' : '') + '</td><td class="n">1</td></tr>' + rows;
       ORDER.forEach(function (t) {
         if (t === 'jet') return;
         var n = c[t] || 0, s = std[t] || 0; if (!n && !s) return;
@@ -255,7 +257,7 @@ window.Sketch = (function () {
       $('skFinish').innerHTML = '<span>' + "גימור ג'טים:" + '</span>' + [['grey', 'אפור · סטנדרט'], ['white', 'לבן · שדרוג']].map(function (f) {
         return '<button class="btn' + (S.finish === f[0] ? ' primary' : '') + '" type="button" data-finish="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('');
       var hasMotor = false, ms = $('skMotor');
-      ms.innerHTML = '<option value="">בחירת מנוע</option>' + MOTORS.map(function (m) { return '<option value="' + m + '">' + m + (m.indexOf('WP-300') === 0 ? ' (עם מערכת הפעלה)' : '') + '</option>'; }).join('');
+      ms.innerHTML = '<option value="">בחירת מנוע</option>' + MOTORS.map(function (m) { return '<option value="' + m + '">' + m + ' · מק"ט ' + MOTOR_SKU[m] + (m.indexOf('WP-300') === 0 ? ' (עם מערכת הפעלה)' : '') + '</option>'; }).join('');
       ms.value = MOTORS.indexOf(S.motor) > -1 ? S.motor : ''; ms.disabled = readOnly;
       $('skPalWrap').hidden = readOnly;
       var nj = S.items.filter(function (i) { return i.type === 'jet'; }).length;
@@ -377,7 +379,7 @@ window.Sketch = (function () {
     if (!data) return [];
     var c = {}, fin = data.finish === 'white' ? 'לבן' : 'אפור', out = [];
     (data.items || []).forEach(function (i) { var k = i.type === 'jet' ? 'jet' + (i.size === 2 ? 2 : 3) : i.type; c[k] = (c[k] || 0) + 1; });
-    if (data.motor) out.push({ n: 'מנוע ' + data.motor, q: 1 });
+    if (data.motor) out.push({ n: 'מנוע ' + data.motor, q: 1, sku: MOTOR_SKU[data.motor] || '' });
     [2, 3].forEach(function (z) { if (c['jet' + z]) out.push({ n: "ג'ט " + z + '" ' + fin, q: c['jet' + z] }); });
     ['ctrl', 'air', 'service', 'faucet', 'shower'].forEach(function (t) { if (c[t]) out.push({ n: TYPES[t].name, q: c[t] }); });
     return out;
