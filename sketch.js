@@ -76,7 +76,7 @@ window.Sketch = (function () {
       '<div class="banner" id="skNote" hidden></div>' +
       '<div class="row" id="skSide"></div>' +
       '<div class="row" id="skFinish"></div>' +
-      '<div class="row" id="skMotorRow"><label for="skMotor">סוג מנוע:</label><select id="skMotor"></select><label for="skHeater">גוף חימום:</label><select id="skHeater"></select></div>' +
+      '<div class="row" id="skMotorRow"><label for="skMotor">סוג מנוע:</label><select id="skMotor"></select><label for="skHeater">גוף חימום:</label><select id="skHeater"></select><label for="skLight">פנס תאורה:</label><select id="skLight"><option value="">לבחור</option><option value="1">עם פנס</option><option value="0">בלי פנס</option></select></div>' +
       '<div class="board"><svg id="skSvg" viewBox="-20 -20 ' + (W + 40) + ' ' + (H + 32) + '" role="img" aria-label="מבט על של האמבטיה"></svg>' +
       '<div class="legend" hidden><span><i style="background:var(--warn)"></i>הוזז מהסטנדרט</span><span><i style="background:var(--ok)"></i>נוסף</span><span><i style="background:var(--bad)"></i>הוסר</span></div>' +
       '<p class="hint" id="skHint"></p></div>' +
@@ -229,6 +229,7 @@ window.Sketch = (function () {
         if (S.jetOk === jets.length) out.push(['warn', "חריגה מאושרת: " + jets.length + " ג'טים במקום " + jetsStd + ' שבקטלוג.']);
         else out.push(['bad', 'לפי הקטלוג, ב-' + (model.name || model.code) + ' עם ' + system + ' יש ' + jetsStd + " ג'טים. בשרטוט מסומנים " + jets.length + '.', 'jetok']);
       }
+      if (S.light !== true && S.light !== false) out.push(['bad', 'צריך לבחור אם יש פנס תאורה או אין.']);
       if (system === 'TITANIUM' && model.jb && !model.jt) out.push(['warn', 'לפי הקטלוג אין לדגם הזה מערכת TITANIUM.']);
       return out;
     }
@@ -255,6 +256,7 @@ window.Sketch = (function () {
       ms.innerHTML = '<option value="">בחירת מנוע</option>' + MOTORS.map(function (m) { return '<option value="' + m + '">' + m + ' · מק"ט ' + MOTOR_SKU[m] + (m.indexOf('WP-300') === 0 ? ' (עם מערכת הפעלה)' : '') + '</option>'; }).join('');
       ms.value = MOTORS.indexOf(S.motor) > -1 ? S.motor : ''; ms.disabled = readOnly;
       var hs = $('skHeater'); hs.innerHTML = Object.keys(HEATERS).map(function (k) { return '<option value="' + k + '">' + HEATERS[k].label + ' · מק"ט ' + HEATERS[k].sku + '</option>'; }).join(''); hs.value = HEATERS[S.heater] ? S.heater : 'H15-R2'; hs.disabled = readOnly;
+      var ls = $('skLight'); ls.value = S.light === true ? '1' : S.light === false ? '0' : ''; ls.disabled = readOnly;
       $('skPalWrap').hidden = readOnly;
       var nj = S.items.filter(function (i) { return i.type === 'jet'; }).length;
       $('skPalWrap').querySelector('h2').textContent = 'הוספת פריט' + (jetsStd ? " · ג'טים: " + nj + ' מתוך ' + jetsStd : " · ג'טים: " + nj);
@@ -351,6 +353,7 @@ window.Sketch = (function () {
     });
     $('skIssues').addEventListener('click', function (ev) { if (readOnly || !ev.target.closest('[data-jetok]')) return; S.jetOk = S.items.filter(function (i) { return i.type === 'jet'; }).length; touch(); });
     $('skHeater').addEventListener('change', function () { if (readOnly) return; S.heater = this.value; touch(); });
+    $('skLight').addEventListener('change', function () { if (readOnly) return; S.light = this.value === '1' ? true : this.value === '0' ? false : null; touch(); });
     $('skMotor').addEventListener('change', function () { if (readOnly) return; S.motor = this.value || null; touch(); });
     $('skFinish').addEventListener('click', function (ev) { var b = ev.target.closest('button[data-finish]'); if (!b || b.disabled) return; S.finish = b.dataset.finish; touch(); });
     $('skReset').addEventListener('click', function () { if (readOnly) return; if (arm('reset')) { var notes = S.notes; uid = 0; S = fresh(); S.notes = notes; selId = null; touch(); } });
@@ -380,8 +383,9 @@ window.Sketch = (function () {
     var h = HEATERS[data.heater] || HEATERS['H15-R2'];
     out.push({ n: 'גוף חימום נירוסטה ' + h.label + ' 1.5KW', q: 1, sku: h.sku });
     out.push({ n: PARTS.air[0], q: 2, sku: PARTS.air[1] });
-    out.push({ n: PARTS.button[f][0], q: 1, sku: PARTS.button[f][1] });
-    out.push({ n: PARTS.light[0], q: 1, sku: PARTS.light[1] });
+    // with a light there are two control buttons (pump + light), without it one
+    out.push({ n: PARTS.button[f][0], q: data.light === true ? 2 : 1, sku: PARTS.button[f][1] });
+    if (data.light === true) out.push({ n: PARTS.light[0], q: 1, sku: PARTS.light[1] });
     [2, 3].forEach(function (z) { if (c['jet' + z]) out.push({ n: "ג'ט " + z + '" BALBOA ' + fin + ' (מסגרת ניקל)', q: c['jet' + z], sku: PARTS.jet[f][z] }); });
     out.push({ n: PARTS.suction[f][0], q: 1, sku: PARTS.suction[f][1] });
     ['faucet', 'shower'].forEach(function (t) { if (c[t]) out.push({ n: TYPES[t].name, q: c[t], sku: '' }); });

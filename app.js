@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261110-080257';
+  var APP_VERSION = '20261110-080854';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -44,6 +44,9 @@
   var counterRef = db.collection('meta').doc('counters'), FIRST_SERIAL = 9694;
   function pad4(n) { n = String(n); while (n.length < 4) n = '0' + n; return n; }
   var TOKEN = new URLSearchParams(location.search).get('a'), CUST_PAGE = /\/s\.html$/.test(location.pathname);
+  // never hand out a serial that an existing order already carries (covers orders numbered before the counter existed, or by hand)
+  function serialFloor() { var m = FIRST_SERIAL; st.orders.forEach(function (o) { var n = parseInt(o.tubNum, 10); if (n >= m && n < 100000) m = n + 1; }); return m; }
+  function showSerial() { var el = $('nTub'); if (el) el.value = pad4(Math.max(st.nextSerial, serialFloor())); }
   var st = { orders: [], loaded: false, err: '', loc: '', q: '', agent: '', tab: 'open', openId: null, holdFor: null, form: false, usersOpen: false, armed: {}, busy: {}, appr: {}, nextSerial: FIRST_SERIAL };
 
   function $(id) { return document.getElementById(id); }
@@ -182,7 +185,7 @@
       if (isOffice()) snap.docs.forEach(function (d) { var a = d.data(); if (a.status === 'approved' && a.orderId) autoApprove(a.orderId, d.id, a); });
       render();
     }, function () {}));
-    if (isOffice()) unsub.push(counterRef.onSnapshot(function (s) { var d = s.exists ? s.data() : null; st.nextSerial = d && d.serial ? d.serial : FIRST_SERIAL; var el = $('nTub'); if (el) el.value = pad4(st.nextSerial); }, function () {}));
+    if (isOffice()) unsub.push(counterRef.onSnapshot(function (s) { var d = s.exists ? s.data() : null; st.nextSerial = d && d.serial ? d.serial : FIRST_SERIAL; showSerial(); }, function () {}));
     if (isOffice()) unsub.push(usersCol.onSnapshot(function (snap) { users = snap.docs.map(function (d) { return Object.assign({ email: d.id }, d.data()); }); st.usersDirty = true; render(); }, function () {}));
     render();
   }
@@ -304,7 +307,7 @@
     var names = AGENTS.slice(); users.forEach(function (u) { if (u.role === 'agent' && u.name && names.indexOf(u.name) < 0) names.push(u.name); });
     f.innerHTML = '<h2>הזמנה חדשה למעקב</h2><div class="grid">' +
       '<label for="nNum">מס\' הזמנה באינטגרל<input id="nNum" inputmode="numeric" autocomplete="off"></label>' +
-      '<label for="nTub">מספר סידורי (ניתן אוטומטית)<input id="nTub" readonly value="' + pad4(st.nextSerial) + '"></label>' +
+      '<label for="nTub">מספר סידורי (ניתן אוטומטית)<input id="nTub" readonly value="' + pad4(Math.max(st.nextSerial, serialFloor())) + '"></label>' +
       '<label for="nCust">לקוח<input id="nCust" autocomplete="off"></label>' +
       '<label for="nModel">דגם אמבטיה<select id="nModel"><option value="">בחירת דגם</option>' + MODELS.map(function (m) { return '<option value="' + m.code + '">' + (m.name || m.code) + ' · ' + m.dims + '</option>'; }).join('') + '</select></label>' +
       '<label for="nSys">מערכת<select id="nSys"><option>BASIC</option><option>TITANIUM</option><option>אחר</option></select></label>' +
@@ -456,7 +459,7 @@
         agentEmail: ag ? ag.email : '', agent: agentName, stage: 'request', stageAt: ev0.at, hold: null, history: [ev0], createdAt: ev0.at };
       // take the next serial and save the order together, so two people opening orders at once never get the same number
       await db.runTransaction(async function (tx) {
-        var s = await tx.get(counterRef), n = s.exists && s.data().serial ? s.data().serial : FIRST_SERIAL;
+        var s = await tx.get(counterRef), n = Math.max(s.exists && s.data().serial ? s.data().serial : FIRST_SERIAL, serialFloor());
         order.tubNum = pad4(n);
         tx.set(col.doc(), order); tx.set(counterRef, { serial: n + 1 });
       });
