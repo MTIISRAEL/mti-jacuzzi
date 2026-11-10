@@ -72,7 +72,7 @@
   function newToken() { var a = new Uint8Array(16); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join(''); }
   function custLink(o) { return location.origin + location.pathname + '?a=' + o.approvalToken; }
   function intlPhone(p) { var d = String(p || '').replace(/\D/g, ''); if (d.indexOf('972') === 0) return d; if (d.charAt(0) === '0') return '972' + d.slice(1); return d; }
-  function custMessage(o) { return 'שלום' + (o.customer ? ' ' + o.customer : '') + ', כאן MTI. מצורף שרטוט הג\'קוזי שהזמנת' + (o.model ? ' (' + o.model + ')' : '') + '. נא לבדוק את הקירות, מיקום הג\'טים, הברז ופתח השירות, ולאשר בקישור:\n' + custLink(o); }
+  function custMessage(o) { return 'שלום' + (o.customer ? ' ' + o.customer : '') + ', כאן MTI. מצורף שרטוט הג\'קוזי שהזמנת' + (o.model ? ' (' + o.model + ')' : '') + '. נא לבדוק את הקירות, פריסת הג\'טים ופתח השירות, ולאשר בקישור:\n' + custLink(o); }
   async function customerMode() {
     ['loginView', 'noAccessView', 'appView'].forEach(function (v) { $(v).hidden = true; });
     $('custView').hidden = false;
@@ -85,7 +85,7 @@
     if (d.status === 'draft') { msg('השרטוט עדיין בהכנה. נשלח קישור כשיהיה מוכן.'); return; }
     $('custSub').textContent = [d.customer, d.model + ' · ' + model.dims + ' ס"מ', d.system].filter(Boolean).join(' · ');
     Sketch.open($('custSketch'), { model: model, system: d.system, data: d.sketch, readOnly: true, customer: true,
-      readOnlyNote: 'כך הג\'קוזי ייוצר. בדקו את הקירות, מיקום הג\'טים, הברז ופתח השירות.' });
+      readOnlyNote: 'בדקו את הקירות, פריסת הג\'טים ופתח השירות.' });
     var box = $('custApprove'); box.hidden = false;
     function done(status, name, at) {
       box.innerHTML = status === 'approved'

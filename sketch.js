@@ -79,7 +79,8 @@ window.Sketch = (function () {
       '</div>';
     function $(id) { return host.querySelector('#' + id); }
     var svg = $('skSvg');
-    if (opt.customer) { // the customer sees the drawing and the list of walls and changes, not the workshop panels
+    if (opt.customer) { // the customer sees only the drawing: walls, service opening and jet layout
+      $('skChanges').closest('.panel').hidden = true; host.querySelector('.legend').hidden = true;
       host.querySelector('.head').hidden = true; $('skIssues').hidden = true; $('skFinish').hidden = true; $('skMotorRow').hidden = true;
       $('skKit').closest('.panel').hidden = true; $('skNotes').closest('.panel').hidden = true;
     }
@@ -166,12 +167,18 @@ window.Sketch = (function () {
         '<rect x="' + (W / 2 - 13) + '" y="-17.2" width="26" height="6.4" fill="var(--surface)"/><text class="t-dim" text-anchor="middle" x="' + (W / 2) + '" y="-12.4">' + W + ' ' + CM + '</text>' +
         '<path d="M-14 0V' + H + 'M-16 0H-12M-16 ' + H + 'H-12" stroke="var(--muted)" stroke-width=".4" fill="none"/>' +
         '<rect x="-17.2" y="' + (H / 2 - 10) + '" width="6.4" height="20" fill="var(--surface)"/><text class="t-dim" text-anchor="middle" x="-12.4" y="' + (H / 2) + '" transform="rotate(-90 -12.4 ' + (H / 2) + ')">' + H + ' ' + CM + '</text>';
-      S.removed.forEach(function (it) {
+      if (!opt.customer) S.removed.forEach(function (it) {
         o += '<g data-ghost="' + it.id + '" transform="' + tf({ type: it.type, x: it.std.x, y: it.std.y, side: it.std.side }) + '"' + (readOnly ? '' : ' style="cursor:pointer"') + '>' +
           '<circle r="6.5" fill="transparent"/><circle r="3.4" fill="none" stroke="var(--bad)" stroke-width=".7" stroke-dasharray="1.4 1"/><path d="M-1.9 -1.9L1.9 1.9M1.9 -1.9L-1.9 1.9" stroke="var(--bad)" stroke-width=".8"/></g>';
       });
       S.items.slice().sort(function (a, b) { return (b.type === 'motor') - (a.type === 'motor') || (b.type === 'service') - (a.type === 'service'); })
-        .forEach(function (it) { o += '<g class="it" data-id="' + it.id + '" transform="' + tf(it) + '">' + hit(it) + ringFor(it) + symbol(it) + '</g>'; });
+        .forEach(function (it) {
+          if (opt.customer) { // no change marks, no jet sizes, and only jets and the service opening
+            if (it.type === 'jet' || it.type === 'service') o += '<g transform="' + tf(it) + '">' + symbol(it.type === 'jet' ? { type: 'jet', size: 3 } : it) + '</g>';
+            return;
+          }
+          o += '<g class="it" data-id="' + it.id + '" transform="' + tf(it) + '">' + hit(it) + ringFor(it) + symbol(it) + '</g>';
+        });
       svg.innerHTML = o;
     }
     function where(it) {
