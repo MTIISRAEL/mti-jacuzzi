@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261110-114520';
+  var APP_VERSION = '20261110-143304';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -250,6 +250,7 @@
     if (o.notes) h += '<div class="notes">' + esc(o.notes) + '</div>';
     if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר סידורי</label><input id="tn-' + id + '" inputmode="numeric" maxlength="4" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
     if (MODEL[o.model]) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
+    if (MODEL[o.model] && o.sketch && me.role !== 'agent') h += '<button class="btn" type="button" data-skprint="' + id + '">הדפסת סקיצה למאבזר</button>';
     if (isOffice() && o.approvalToken && o.sketch && !o.sketchBlocking && IDX[o.stage] <= IDX.approval) {
       var ph = intlPhone(o.phone), txt = encodeURIComponent(custMessage(o)), ca = custAnswer(o);
       h += '<div class="sendbox"><strong>שליחת השרטוט ללקוח לאישור</strong>' +
@@ -375,6 +376,24 @@
     }
     return h;
   }
+  // A4 sheet for the fitter in Barkan, who works without a screen: the jacuzzi number, the drawing and which jets go in. No customer details.
+  function printSketch(o) {
+    var model = MODEL[o.model], sk = o.sketch; if (!model || !sk) return;
+    var tmp = document.createElement('div'); tmp.style.display = 'none'; document.body.appendChild(tmp);
+    Sketch.open(tmp, { model: model, system: o.system, data: sk, readOnly: true });
+    var svg = tmp.querySelector('#skSvg').outerHTML.replace('id="skSvg"', '');
+    tmp.querySelector('#skClose').click(); tmp.remove();
+    var parts = Sketch.kitOf(sk).filter(function (x) { return /^ג'ט|^מנוע|^פנס|^יניקה|^ברז|^מזלף/.test(x.n); });
+    var facts = [['דגם', mname(o.model) + ' · ' + model.dims], ['מערכת', o.system], ['כיוון', !model.sides ? '' : sk.side === 'R' ? 'ימין' : sk.side === 'L' ? 'שמאל' : ''], ['פנס', sk.light === true ? 'יש' : 'אין'], ['פאנל', o.panel ? 'כן' : '']].filter(function (f) { return f[1]; });
+    $('printArea').innerHTML = '<div class="p-head"><div><div class="p-brand">MTI</div><h1>סקיצה לאיבזור</h1></div><div class="p-serial"><span>ג\'קוזי מס\'</span><b>' + esc(o.tubNum || '') + '</b></div></div>' +
+      '<div class="p-facts">' + facts.map(function (f) { return '<div><span>' + esc(f[0]) + '</span><b>' + esc(f[1]) + '</b></div>'; }).join('') + '</div>' +
+      '<div class="p-sketch">' + svg + '</div>' +
+      '<table class="p-kit"><thead><tr><th>פריט</th><th class="c">כמות</th></tr></thead><tbody>' + parts.map(function (x) { return '<tr><td>' + esc(x.n) + '</td><td class="c q">' + esc(x.q) + '</td></tr>'; }).join('') + '</tbody></table>' +
+      (sk.notes ? '<p class="p-notes"><b>הערות למאבזר:</b> ' + esc(sk.notes) + '</p>' : '');
+    var t = document.title, img = $('printArea').querySelector('image'), go = function () { document.title = 'סקיצה ' + (o.tubNum || ''); window.print(); document.title = t; };
+    // wait for the tub picture so it is on the paper
+    if (img) { var pre = new Image(), fired = false, once = function () { if (!fired) { fired = true; go(); } }; pre.onload = pre.onerror = once; pre.src = img.getAttribute('href'); setTimeout(once, 2500); } else go();
+  }
   // A4 sheet of one order's kit, sent to the browser's print dialog (where it can also be saved as PDF)
   function printKit(o) {
     var lines = o.stage === 'kitOrder' || !(o.kitList && o.kitList.length) ? kitDraft(o) : o.kitList, sk = o.sketch || {};
@@ -439,6 +458,7 @@
     else if (d.kitadd && (o = find(d.kitadd))) { var kn = $('kn-' + o.id).value.trim().slice(0, 80), kq = parseInt($('kq-' + o.id).value, 10) || 1, ks = $('ks-' + o.id).value.trim().slice(0, 20); if (!kn) return; document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ kitExtra: (o.kitExtra || []).concat([{ n: kn, q: kq, sku: ks }]) }); }); }
     else if (d.kitdel && (o = find(d.kitdel))) { var ke = (o.kitExtra || []).slice(); ke.splice(+d.i, 1); write(o.id, function () { return col.doc(o.id).update({ kitExtra: ke }); }); }
     else if (d.kitprint && (o = find(d.kitprint))) printKit(o);
+    else if (d.skprint && (o = find(d.skprint))) printSketch(o);
     else if (d.fail && (o = find(d.fail))) { if (arm('fail' + o.id)) write(o.id, function () { return move(o, 'toBarkan', 'הבדיקה נכשלה, חוזר לברקן'); }); }
     else if (d.holdopen) { st.holdFor = d.holdopen; render(); }
     else if (d.hold && (o = find(d.hold))) {
