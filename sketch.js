@@ -18,6 +18,16 @@ window.Sketch = (function () {
   // Motor types. The motor is chosen, not drawn. The WP-300 pair is only for a jacuzzi with a control system.
   var MOTORS = ['WPPE120', 'JA120', 'JA150', 'JA200', 'WP-300-I', 'WP-300-II'];
   // Item numbers (מק"ט) in the Integral ERP, read from its item index.
+  // Heating element: H15-R2 in most jacuzzis.
+  var HEATERS = { 'H15-R2': { sku: '40500', label: 'H15-R2 (L)' }, 'H15-R1': { sku: '40505', label: 'H15-R1 (I)' }, 'H15-R3': { sku: '40498', label: 'H15-R3 (T)' } };
+  // Parts that go into every jacuzzi kit, by jet finish (BALBOA parts; item numbers from the ERP).
+  var PARTS = {
+    jet:     { grey: { 2: '90510', 3: '90560' }, white: { 2: '90520', 3: '90570' } },
+    button:  { grey: ['כפתור הפעלה שטוח BALBOA ניקל', '48170'], white: ['כפתור הפעלה שטוח BALBOA לבן', '48180'] },
+    suction: { grey: ['יניקה 1.5" BALBOA ניקל', '48270'], white: ['יניקה 1.5" BALBOA לבן', '48280'] },
+    air:     ['וסת אוויר BALBOA ניקל', '48070'],
+    light:   ['פנס תאורה קומפלט לג\'קוזי 7 צבעים LED', '48660']
+  };
   var MOTOR_SKU = { 'WPPE120': '40480', 'JA120': '40120', 'JA150': '40150', 'JA200': '40200', 'WP-300-I': '40300', 'WP-300-II': '40320' };
 
   // Standard jet layouts, measured from the catalog renders. Only MTI-114 has them so far.
@@ -47,17 +57,15 @@ window.Sketch = (function () {
       if (model.sides) { // right-handed layout: the square corner is top right
         add('service', W - 26, H, 'bottom');
       } else {
-        add('ctrl', 4.2, H - 7.9);
-        add('air', 8.9, H - 4.8);
         add('service', Math.min(24, W / 2), H, 'bottom');
       }
       return items;
     }
-    function fresh() { return { finish: 'grey', side: null, items: template(), removed: [], walls: { top: true, right: true, bottom: false, left: false }, notes: '' }; }
+    function fresh() { return { finish: 'grey', side: null, heater: 'H15-R2', items: template(), removed: [], walls: { top: true, right: true, bottom: false, left: false }, notes: '' }; }
     var S = opt.data ? JSON.parse(JSON.stringify(opt.data)) : fresh();
-    S.items = S.items || []; S.removed = S.removed || []; S.walls = S.walls || {};
-    // suction and motor are no longer drawn (only the service opening is); drop them from drawings saved before that change
-    function drawn(i) { return i.type !== 'suction' && i.type !== 'motor'; }
+    S.items = S.items || []; S.removed = S.removed || []; S.walls = S.walls || {}; if (!S.heater) S.heater = 'H15-R2';
+    // suction, motor, control button and air regulators are not drawn (they are fixed kit parts); drop them from drawings saved before that change
+    function drawn(i) { return i.type !== 'suction' && i.type !== 'motor' && i.type !== 'ctrl' && i.type !== 'air'; }
     S.items = S.items.filter(drawn); S.removed = S.removed.filter(drawn);
     S.items.concat(S.removed).forEach(function (i) { var n = +String(i.id).slice(1); if (n > uid) uid = n; });
 
@@ -68,7 +76,7 @@ window.Sketch = (function () {
       '<div class="banner" id="skNote" hidden></div>' +
       '<div class="row" id="skSide"></div>' +
       '<div class="row" id="skFinish"></div>' +
-      '<div class="row" id="skMotorRow"><label for="skMotor">סוג מנוע:</label><select id="skMotor"></select></div>' +
+      '<div class="row" id="skMotorRow"><label for="skMotor">סוג מנוע:</label><select id="skMotor"></select><label for="skHeater">גוף חימום:</label><select id="skHeater"></select></div>' +
       '<div class="board"><svg id="skSvg" viewBox="-20 -20 ' + (W + 40) + ' ' + (H + 32) + '" role="img" aria-label="מבט על של האמבטיה"></svg>' +
       '<div class="legend" hidden><span><i style="background:var(--warn)"></i>הוזז מהסטנדרט</span><span><i style="background:var(--ok)"></i>נוסף</span><span><i style="background:var(--bad)"></i>הוסר</span></div>' +
       '<p class="hint" id="skHint"></p></div>' +
@@ -232,20 +240,7 @@ window.Sketch = (function () {
       if (model.sides) li.push('<li><span class="dot wall"></span><span>כיוון האמבטיה: ' + (S.side === 'R' ? 'ימין' : S.side === 'L' ? 'שמאל' : 'לא נבחר') + '</span></li>');
       li.push('<li><span class="dot wall"></span><span>קירות: ' + (walls.length ? walls.join(', ') : 'אין (אמבטיה חופשית)') + '</span></li>');
       $('skChanges').innerHTML = li.join('');
-      function counts2(items) { var c = {}; items.forEach(function (i) { var k = i.type === 'jet' ? 'jet' + jsize(i) : i.type; c[k] = (c[k] || 0) + 1; }); return c; }
-      var c = counts2(S.items), std = counts2(template()), rows = '', fin = S.finish === 'white' ? 'לבן' : 'אפור';
-      [2, 3].forEach(function (z) {
-        var n = c['jet' + z] || 0, s0 = std['jet' + z] || 0; if (!n && !s0) return;
-        var d = n - s0, diff = d && tpl && tpl[system] ? '<span class="diff">' + (d > 0 ? '+' + d : d) + ' מהסטנדרט</span>' : '';
-        rows += '<tr><td>' + "ג'ט " + z + '" ' + fin + diff + '</td><td class="n">' + n + '</td></tr>';
-      });
-      if (S.motor) rows = '<tr><td>מנוע ' + esc(S.motor) + (MOTOR_SKU[S.motor] ? ' <span class="sku">מק"ט ' + MOTOR_SKU[S.motor] + '</span>' : '') + '</td><td class="n">1</td></tr>' + rows;
-      ORDER.forEach(function (t) {
-        if (t === 'jet') return;
-        var n = c[t] || 0, s = std[t] || 0; if (!n && !s) return;
-        var d = n - s, diff = d && (t !== 'jet' || (tpl && tpl[system])) ? '<span class="diff">' + (d > 0 ? '+' + d : d) + ' מהסטנדרט</span>' : '';
-        rows += '<tr><td>' + TYPES[t].name + (t === 'jet' ? ' ' + (S.finish === 'white' ? 'לבן' : 'אפור') : '') + diff + '</td><td class="n">' + n + '</td></tr>';
-      });
+      var rows = kitOf(S).map(function (x) { return '<tr><td>' + esc(x.n) + (x.sku ? ' <span class="sku">מק"ט ' + esc(x.sku) + '</span>' : '') + '</td><td class="n">' + x.q + '</td></tr>'; }).join('');
       $('skKit').innerHTML = rows;
       return list;
     }
@@ -254,11 +249,12 @@ window.Sketch = (function () {
       $('skSide').hidden = !model.sides || !!opt.customer;
       if (model.sides) $('skSide').innerHTML = '<span>כיוון האמבטיה:</span>' + [['R', 'ימין'], ['L', 'שמאל']].map(function (f) {
         return '<button class="btn' + (S.side === f[0] ? ' primary' : '') + '" type="button" data-side="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('') + (S.side ? '' : '<span class="who">צריך לבחור</span>');
-      $('skFinish').innerHTML = '<span>' + "גימור ג'טים:" + '</span>' + [['grey', 'אפור · סטנדרט'], ['white', 'לבן · שדרוג']].map(function (f) {
+      $('skFinish').innerHTML = '<span>' + "גימור ג'טים:" + '</span>' + [['grey', 'גרפיט · סטנדרט'], ['white', 'לבן · שדרוג']].map(function (f) {
         return '<button class="btn' + (S.finish === f[0] ? ' primary' : '') + '" type="button" data-finish="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('');
       var hasMotor = false, ms = $('skMotor');
       ms.innerHTML = '<option value="">בחירת מנוע</option>' + MOTORS.map(function (m) { return '<option value="' + m + '">' + m + ' · מק"ט ' + MOTOR_SKU[m] + (m.indexOf('WP-300') === 0 ? ' (עם מערכת הפעלה)' : '') + '</option>'; }).join('');
       ms.value = MOTORS.indexOf(S.motor) > -1 ? S.motor : ''; ms.disabled = readOnly;
+      var hs = $('skHeater'); hs.innerHTML = Object.keys(HEATERS).map(function (k) { return '<option value="' + k + '">' + HEATERS[k].label + ' · מק"ט ' + HEATERS[k].sku + '</option>'; }).join(''); hs.value = HEATERS[S.heater] ? S.heater : 'H15-R2'; hs.disabled = readOnly;
       $('skPalWrap').hidden = readOnly;
       var nj = S.items.filter(function (i) { return i.type === 'jet'; }).length;
       $('skPalWrap').querySelector('h2').textContent = 'הוספת פריט' + (jetsStd ? " · ג'טים: " + nj + ' מתוך ' + jetsStd : " · ג'טים: " + nj);
@@ -354,6 +350,7 @@ window.Sketch = (function () {
       S.side = b.dataset.side; touch();
     });
     $('skIssues').addEventListener('click', function (ev) { if (readOnly || !ev.target.closest('[data-jetok]')) return; S.jetOk = S.items.filter(function (i) { return i.type === 'jet'; }).length; touch(); });
+    $('skHeater').addEventListener('change', function () { if (readOnly) return; S.heater = this.value; touch(); });
     $('skMotor').addEventListener('change', function () { if (readOnly) return; S.motor = this.value || null; touch(); });
     $('skFinish').addEventListener('click', function (ev) { var b = ev.target.closest('button[data-finish]'); if (!b || b.disabled) return; S.finish = b.dataset.finish; touch(); });
     $('skReset').addEventListener('click', function () { if (readOnly) return; if (arm('reset')) { var notes = S.notes; uid = 0; S = fresh(); S.notes = notes; selId = null; touch(); } });
@@ -377,11 +374,17 @@ window.Sketch = (function () {
   // The kit items that follow from a saved drawing: [{ n: name, q: quantity }]
   function kitOf(data) {
     if (!data) return [];
-    var c = {}, fin = data.finish === 'white' ? 'לבן' : 'אפור', out = [];
+    var c = {}, f = data.finish === 'white' ? 'white' : 'grey', fin = f === 'white' ? 'לבן' : 'גרפיט', out = [];
     (data.items || []).forEach(function (i) { var k = i.type === 'jet' ? 'jet' + (i.size === 2 ? 2 : 3) : i.type; c[k] = (c[k] || 0) + 1; });
     if (data.motor) out.push({ n: 'מנוע ' + data.motor, q: 1, sku: MOTOR_SKU[data.motor] || '' });
-    [2, 3].forEach(function (z) { if (c['jet' + z]) out.push({ n: "ג'ט " + z + '" ' + fin, q: c['jet' + z] }); });
-    ['ctrl', 'air', 'service', 'faucet', 'shower'].forEach(function (t) { if (c[t]) out.push({ n: TYPES[t].name, q: c[t] }); });
+    var h = HEATERS[data.heater] || HEATERS['H15-R2'];
+    out.push({ n: 'גוף חימום נירוסטה ' + h.label + ' 1.5KW', q: 1, sku: h.sku });
+    out.push({ n: PARTS.air[0], q: 2, sku: PARTS.air[1] });
+    out.push({ n: PARTS.button[f][0], q: 1, sku: PARTS.button[f][1] });
+    out.push({ n: PARTS.light[0], q: 1, sku: PARTS.light[1] });
+    [2, 3].forEach(function (z) { if (c['jet' + z]) out.push({ n: "ג'ט " + z + '" BALBOA ' + fin + ' (מסגרת ניקל)', q: c['jet' + z], sku: PARTS.jet[f][z] }); });
+    out.push({ n: PARTS.suction[f][0], q: 1, sku: PARTS.suction[f][1] });
+    ['faucet', 'shower'].forEach(function (t) { if (c[t]) out.push({ n: TYPES[t].name, q: c[t], sku: '' }); });
     return out;
   }
   return { open: open, hasBlocking: hasBlocking, kitOf: kitOf };
