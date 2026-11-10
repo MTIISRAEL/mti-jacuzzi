@@ -40,7 +40,7 @@
   // Serial numbers run on their own: meta/counters.serial holds the next one to hand out.
   var counterRef = db.collection('meta').doc('counters'), FIRST_SERIAL = 9694;
   function pad4(n) { n = String(n); while (n.length < 4) n = '0' + n; return n; }
-  var TOKEN = new URLSearchParams(location.search).get('a');
+  var TOKEN = new URLSearchParams(location.search).get('a'), CUST_PAGE = /\/s\.html$/.test(location.pathname);
   var st = { orders: [], loaded: false, err: '', loc: '', q: '', agent: '', tab: 'open', openId: null, holdFor: null, form: false, usersOpen: false, armed: {}, busy: {}, appr: {}, nextSerial: FIRST_SERIAL };
 
   function $(id) { return document.getElementById(id); }
@@ -74,32 +74,33 @@
   // The customer opens index.html?a=<token> without signing in, sees the drawing and approves it or sends a note.
   // approvals/<token> holds a copy of the drawing; the token is the only key to it.
   function newToken() { var a = new Uint8Array(16); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join(''); }
-  function custLink(o) { return location.origin + location.pathname + '?a=' + o.approvalToken; }
+  // The customer's link goes to s.html, a copy of the page whose title (what WhatsApp shows in the link preview) is about approving the sketch.
+  function custLink(o) { return location.origin + location.pathname.replace(/[^\/]*$/, '') + 's.html?a=' + o.approvalToken; }
   function intlPhone(p) { var d = String(p || '').replace(/\D/g, ''); if (d.indexOf('972') === 0) return d; if (d.charAt(0) === '0') return '972' + d.slice(1); return d; }
-  function custMessage(o) { return 'שלום' + (o.customer ? ' ' + o.customer : '') + ', כאן MTI. מצורף שרטוט הג\'קוזי שהזמנת' + (o.model ? ' (' + o.model + ')' : '') + '. נא לבדוק את הקירות, פריסת הג\'טים ופתח השירות, ולאשר בקישור:\n' + custLink(o); }
+  function custMessage(o) { return 'שלום' + (o.customer ? ' ' + o.customer : '') + ', כאן MTI. מצורפת סקיצת הג\'קוזי שהזמנת' + (o.model ? ' (' + o.model + ')' : '') + '. נא לבדוק את הקירות, פריסת הג\'טים ופתח השירות, ולאשר בקישור:\n' + custLink(o); }
   async function customerMode() {
     ['loginView', 'noAccessView', 'appView'].forEach(function (v) { $(v).hidden = true; });
-    $('custView').hidden = false;
+    $('custView').hidden = false; document.title = 'MTI · אישור סקיצה לג\'קוזי';
     function msg(s) { $('custMsg').hidden = false; $('custMsg').textContent = s; $('custSub').textContent = ''; }
     if (!/^[a-f0-9]{32}$/.test(TOKEN)) { msg('הקישור אינו תקף. אפשר לבקש מ-MTI קישור חדש.'); return; }
     var ref = apCol.doc(TOKEN), d;
-    try { var snap = await ref.get(); d = snap.exists ? snap.data() : null; } catch (e) { msg('לא הצלחנו לטעון את השרטוט. בדקו את החיבור ונסו שוב.'); return; }
+    try { var snap = await ref.get(); d = snap.exists ? snap.data() : null; } catch (e) { msg('לא הצלחנו לטעון את הסקיצה. בדקו את החיבור ונסו שוב.'); return; }
     var model = d && MODEL[d.model];
     if (!d || !model || !d.sketch) { msg('הקישור אינו תקף. אפשר לבקש מ-MTI קישור חדש.'); return; }
-    if (d.status === 'draft') { msg('השרטוט עדיין בהכנה. נשלח קישור כשיהיה מוכן.'); return; }
+    if (d.status === 'draft') { msg('הסקיצה עדיין בהכנה. נשלח קישור כשתהיה מוכנה.'); return; }
     $('custSub').textContent = [d.customer, d.model + ' · ' + model.dims + ' ס"מ', d.system].filter(Boolean).join(' · ');
     Sketch.open($('custSketch'), { model: model, system: d.system, data: d.sketch, readOnly: true, customer: true,
       readOnlyNote: 'בדקו את הקירות, פריסת הג\'טים ופתח השירות.' });
     var box = $('custApprove'); box.hidden = false;
     function done(status, name, at) {
       box.innerHTML = status === 'approved'
-        ? '<div class="stamp">השרטוט אושר' + (name ? ' על ידי ' + esc(name) : '') + (at ? ' · ' + fmt(at) : '') + '<br>תודה! מתחילים בהכנה.</div>'
-        : '<div class="issue warn">ההערה שלך התקבלה. נעדכן את השרטוט ונשלח קישור חדש.</div>';
+        ? '<div class="stamp">הסקיצה אושרה' + (name ? ' על ידי ' + esc(name) : '') + (at ? ' · ' + fmt(at) : '') + '<br>תודה! מתחילים בהכנה.</div>'
+        : '<div class="issue warn">ההערה שלך התקבלה. נעדכן את הסקיצה ונשלח קישור חדש.</div>';
     }
     if (d.status !== 'pending') { done(d.status, d.answeredName, d.answeredAt); return; }
-    box.innerHTML = '<h2 style="margin:0">אישור השרטוט</h2><div>אחרי האישור מתחילים בהכנת הג\'קוזי לפי השרטוט הזה.</div>' +
+    box.innerHTML = '<h2 style="margin:0">אישור הסקיצה</h2><div>אחרי האישור מתחילים בהכנת הג\'קוזי לפי הסקיצה הזו.</div>' +
       '<label class="f" for="cName">שם המאשר/ת<input id="cName" autocomplete="name"></label>' +
-      '<button class="btn primary big" type="button" id="cOk">אני מאשר/ת את השרטוט</button>' +
+      '<button class="btn primary big" type="button" id="cOk">אני מאשר/ת את הסקיצה</button>' +
       '<label class="f" for="cNote">משהו לא נכון? כתבו מה צריך לשנות<textarea id="cNote" rows="3"></textarea></label>' +
       '<button class="btn" type="button" id="cChange">שליחת בקשה לשינוי</button><div id="cErr" style="color:var(--bad)"></div>';
     $('cName').value = d.customer || '';
@@ -109,12 +110,12 @@
       if (status === 'changes' && !note) { $('cErr').textContent = 'נא לכתוב מה צריך לשנות.'; return; }
       $('cOk').disabled = $('cChange').disabled = true;
       try { await ref.update({ status: status, answeredAt: at, answeredName: name, comment: status === 'changes' ? note : '' }); done(status, name, at); }
-      catch (e) { $('cOk').disabled = $('cChange').disabled = false; $('cErr').textContent = 'השליחה לא הצליחה. ייתכן שהשרטוט כבר אושר או השתנה. רעננו את הדף ונסו שוב.'; }
+      catch (e) { $('cOk').disabled = $('cChange').disabled = false; $('cErr').textContent = 'השליחה לא הצליחה. ייתכן שהסקיצה כבר אושרה או השתנתה. רעננו את הדף ונסו שוב.'; }
     }
     $('cOk').addEventListener('click', function () { answer('approved'); });
     $('cChange').addEventListener('click', function () { answer('changes'); });
   }
-  if (TOKEN) { customerMode(); return; }
+  if (TOKEN || CUST_PAGE) { customerMode(); return; }
 
   // ---------- sign-in ----------
   function show(view) { ['loginView', 'noAccessView', 'appView'].forEach(function (v) { $(v).hidden = v !== view; }); }
@@ -234,7 +235,7 @@
         '<button class="btn small" type="button" data-savecontact="' + id + '">שמור</button></div><div class="row">' +
         (ph ? '<a class="btn small primary" target="_blank" rel="noopener" data-send="' + id + '" data-ch="WhatsApp" href="https://wa.me/' + ph + '?text=' + txt + '">WhatsApp</a>' +
               '<a class="btn small" data-send="' + id + '" data-ch="SMS" href="sms:+' + ph + '?body=' + txt + '">SMS</a>' : '') +
-        (o.custEmail ? '<a class="btn small" data-send="' + id + '" data-ch="אימייל" href="mailto:' + esc(o.custEmail) + '?subject=' + encodeURIComponent('שרטוט הג\'קוזי שלך לאישור · MTI') + '&body=' + txt + '">אימייל</a>' : '') +
+        (o.custEmail ? '<a class="btn small" data-send="' + id + '" data-ch="אימייל" href="mailto:' + esc(o.custEmail) + '?subject=' + encodeURIComponent('MTI · אישור סקיצה לג\'קוזי') + '&body=' + txt + '">אימייל</a>' : '') +
         '<button class="btn small" type="button" data-copy="' + id + '">העתקת קישור</button></div>' +
         (!ph && !o.custEmail ? '<div class="st">כדי לשלוח, מוסיפים טלפון או מייל של הלקוח ושומרים. אפשר גם להעתיק את הקישור ולשלוח ידנית.</div>' : '') + '</div>';
     }
