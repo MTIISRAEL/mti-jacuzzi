@@ -1,5 +1,5 @@
 // Drawing screen: top view of one jacuzzi with walls, jets, faucet, motor and service opening.
-// Sketch.open(host, { model, system, data, readOnly, title, onSave(data) -> Promise, onClose() })
+// Sketch.open(host, { model, system, data, readOnly, customer, title, onSave(data) -> Promise, onClose() })
 // All positions are in centimetres from the tub's top-left corner (back wall, left end).
 window.Sketch = (function () {
   var CM = 'ס"מ';
@@ -71,6 +71,10 @@ window.Sketch = (function () {
       '</div>';
     function $(id) { return host.querySelector('#' + id); }
     var svg = $('skSvg');
+    if (opt.customer) { // the customer sees the drawing and the list of walls and changes, not the workshop panels
+      host.querySelector('.head').hidden = true; $('skIssues').hidden = true; $('skFinish').hidden = true;
+      $('skKit').closest('.panel').hidden = true; $('skNotes').closest('.panel').hidden = true;
+    }
 
     function status(it) {
       if (!it.std) return 'added';

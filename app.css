@@ -183,3 +183,11 @@ label.f.wide { grid-column: 1 / -1; }
 .users td { padding: 6px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .users td.e { direction: ltr; text-align: right; overflow-wrap: anywhere; font-size: 13.5px; }
 .users select { font: inherit; font-size: 15px; padding: 6px 8px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); min-height: 38px; }
+
+/* ---- sending the drawing to the customer ---- */
+.sendbox { display: flex; flex-direction: column; gap: 8px; border: 1.5px solid var(--accent); border-radius: 10px; padding: 10px; }
+.sendbox .st { font-size: 13.5px; color: var(--muted); }
+.sendbox .st.chg { color: var(--warn); font-weight: 500; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.sendbox input { font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 40px; min-width: 0; flex: 1 1 130px; }
+.approve textarea, .approve input { font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1.5px solid var(--line); border-radius: 9px; padding: 9px 10px; width: 100%; }

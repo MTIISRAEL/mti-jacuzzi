@@ -32,8 +32,9 @@
   var DAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
   var MODELS = window.MTI_MODELS || [], MODEL = {}; MODELS.forEach(function (m) { MODEL[m.code] = m; });
 
-  var me = null, col = db.collection('orders'), usersCol = db.collection('users'), unsub = [], users = [];
-  var st = { orders: [], loaded: false, err: '', loc: '', q: '', agent: '', tab: 'open', openId: null, holdFor: null, form: false, usersOpen: false, armed: {}, busy: {} };
+  var me = null, col = db.collection('orders'), usersCol = db.collection('users'), apCol = db.collection('approvals'), unsub = [], users = [];
+  var TOKEN = new URLSearchParams(location.search).get('a');
+  var st = { orders: [], loaded: false, err: '', loc: '', q: '', agent: '', tab: 'open', openId: null, holdFor: null, form: false, usersOpen: false, armed: {}, busy: {}, appr: {} };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -61,6 +62,52 @@
   function canWrite() { return me && me.role !== 'agent'; }
   function canAct(stage) { return isAdmin() || (me && stage.roles.indexOf(me.role) > -1); }
   function canDraw(o) { return isOffice() && IDX[o.stage] <= IDX.approval; }
+
+  // ---------- customer link ----------
+  // The customer opens index.html?a=<token> without signing in, sees the drawing and approves it or sends a note.
+  // approvals/<token> holds a copy of the drawing; the token is the only key to it.
+  function newToken() { var a = new Uint8Array(16); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join(''); }
+  function custLink(o) { return location.origin + location.pathname + '?a=' + o.approvalToken; }
+  function intlPhone(p) { var d = String(p || '').replace(/\D/g, ''); if (d.indexOf('972') === 0) return d; if (d.charAt(0) === '0') return '972' + d.slice(1); return d; }
+  function custMessage(o) { return 'שלום' + (o.customer ? ' ' + o.customer : '') + ', כאן MTI. מצורף שרטוט הג\'קוזי שהזמנת' + (o.model ? ' (' + o.model + ')' : '') + '. נא לבדוק את הקירות, מיקום הג\'טים, הברז ופתח השירות, ולאשר בקישור:\n' + custLink(o); }
+  async function customerMode() {
+    ['loginView', 'noAccessView', 'appView'].forEach(function (v) { $(v).hidden = true; });
+    $('custView').hidden = false;
+    function msg(s) { $('custMsg').hidden = false; $('custMsg').textContent = s; $('custSub').textContent = ''; }
+    if (!/^[a-f0-9]{32}$/.test(TOKEN)) { msg('הקישור אינו תקף. אפשר לבקש מ-MTI קישור חדש.'); return; }
+    var ref = apCol.doc(TOKEN), d;
+    try { var snap = await ref.get(); d = snap.exists ? snap.data() : null; } catch (e) { msg('לא הצלחנו לטעון את השרטוט. בדקו את החיבור ונסו שוב.'); return; }
+    var model = d && MODEL[d.model];
+    if (!d || !model || !d.sketch) { msg('הקישור אינו תקף. אפשר לבקש מ-MTI קישור חדש.'); return; }
+    if (d.status === 'draft') { msg('השרטוט עדיין בהכנה. נשלח קישור כשיהיה מוכן.'); return; }
+    $('custSub').textContent = [d.customer, d.model + ' · ' + model.dims + ' ס"מ', d.system].filter(Boolean).join(' · ');
+    Sketch.open($('custSketch'), { model: model, system: d.system, data: d.sketch, readOnly: true, customer: true,
+      readOnlyNote: 'כך הג\'קוזי ייוצר. בדקו את הקירות, מיקום הג\'טים, הברז ופתח השירות.' });
+    var box = $('custApprove'); box.hidden = false;
+    function done(status, name, at) {
+      box.innerHTML = status === 'approved'
+        ? '<div class="stamp">השרטוט אושר' + (name ? ' על ידי ' + esc(name) : '') + (at ? ' · ' + fmt(at) : '') + '<br>תודה! מתחילים בהכנה.</div>'
+        : '<div class="issue warn">ההערה שלך התקבלה. נעדכן את השרטוט ונשלח קישור חדש.</div>';
+    }
+    if (d.status !== 'pending') { done(d.status, d.answeredName, d.answeredAt); return; }
+    box.innerHTML = '<h2 style="margin:0">אישור השרטוט</h2><div>אחרי האישור מתחילים בהכנת הג\'קוזי לפי השרטוט הזה.</div>' +
+      '<label class="f" for="cName">שם המאשר/ת<input id="cName" autocomplete="name"></label>' +
+      '<button class="btn primary big" type="button" id="cOk">אני מאשר/ת את השרטוט</button>' +
+      '<label class="f" for="cNote">משהו לא נכון? כתבו מה צריך לשנות<textarea id="cNote" rows="3"></textarea></label>' +
+      '<button class="btn" type="button" id="cChange">שליחת בקשה לשינוי</button><div id="cErr" style="color:var(--bad)"></div>';
+    $('cName').value = d.customer || '';
+    async function answer(status) {
+      var name = $('cName').value.trim().slice(0, 80), note = $('cNote').value.trim().slice(0, 1000), at = new Date().toISOString();
+      if (status === 'approved' && !name) { $('cErr').textContent = 'נא לכתוב את שם המאשר/ת.'; return; }
+      if (status === 'changes' && !note) { $('cErr').textContent = 'נא לכתוב מה צריך לשנות.'; return; }
+      $('cOk').disabled = $('cChange').disabled = true;
+      try { await ref.update({ status: status, answeredAt: at, answeredName: name, comment: status === 'changes' ? note : '' }); done(status, name, at); }
+      catch (e) { $('cOk').disabled = $('cChange').disabled = false; $('cErr').textContent = 'השליחה לא הצליחה. ייתכן שהשרטוט כבר אושר או השתנה. רעננו את הדף ונסו שוב.'; }
+    }
+    $('cOk').addEventListener('click', function () { answer('approved'); });
+    $('cChange').addEventListener('click', function () { answer('changes'); });
+  }
+  if (TOKEN) { customerMode(); return; }
 
   // ---------- sign-in ----------
   function show(view) { ['loginView', 'noAccessView', 'appView'].forEach(function (v) { $(v).hidden = v !== view; }); }
@@ -102,6 +149,11 @@
     unsub.push(q.onSnapshot(function (snap) {
       st.loaded = true; st.orders = snap.docs.map(function (d) { var o = Object.assign({}, d.data()); o.id = d.id; return o; }); render();
     }, function () { st.err = 'לא הצלחנו לטעון את ההזמנות. בדקו את החיבור ופתחו שוב.'; render(); }));
+    if (me.role !== 'agent') unsub.push(apCol.where('status', 'in', ['approved', 'changes']).onSnapshot(function (snap) {
+      st.appr = {}; snap.docs.forEach(function (d) { var a = d.data(); a.token = d.id; if (a.orderId) st.appr[a.orderId] = a; });
+      if (isOffice()) snap.docs.forEach(function (d) { var a = d.data(); if (a.status === 'approved' && a.orderId) autoApprove(a.orderId, d.id, a); });
+      render();
+    }, function () {}));
     if (isOffice()) unsub.push(usersCol.onSnapshot(function (snap) { users = snap.docs.map(function (d) { return Object.assign({ email: d.id }, d.data()); }); st.usersDirty = true; render(); }, function () {}));
     render();
   }
@@ -147,6 +199,9 @@
     var chips = '<span class="chip' + (del ? ' ok' : '') + '">' + f.s.n + '</span>';
     if (f.hold) chips += '<span class="chip hold">מעוכב: ' + esc(o.hold.reason) + '</span>';
     else if (f.late) chips += '<span class="chip late">חריגה של ' + dayWord(f.over) + '</span>';
+    var ca = custAnswer(o);
+    if (ca && ca.status === 'changes') chips += '<span class="chip hold">הלקוח ביקש שינוי</span>';
+    else if (o.stage === 'approval' && o.approvalSentAt) chips += '<span class="chip">נשלח ללקוח</span>';
     var eta = del ? 'סופק ב-' + fmt(o.stageAt) : f.hold ? 'אספקה צפויה: לא ידוע עד שהעיכוב יוסר'
       : 'בשלב הזה ' + dayWord(f.el) + ' · אספקה צפויה יום ' + DAYS[f.eta.getDay()] + "' " + pad(f.eta.getDate()) + '/' + pad(f.eta.getMonth() + 1);
     var meta = [o.model, o.system, o.panel ? 'כולל פאנל' : '', o.agent ? 'סוכן: ' + o.agent : '', o.store].filter(Boolean).map(esc).join(' · ');
@@ -160,6 +215,20 @@
     var id = esc(o.id), busy = st.busy[o.id] ? ' disabled' : '', del = o.stage === 'delivered', h = '<div class="detail">';
     if (o.notes) h += '<div class="notes">' + esc(o.notes) + '</div>';
     if (MODEL[o.model]) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
+    if (isOffice() && o.approvalToken && o.sketch && !o.sketchBlocking && IDX[o.stage] <= IDX.approval) {
+      var ph = intlPhone(o.phone), txt = encodeURIComponent(custMessage(o)), ca = custAnswer(o);
+      h += '<div class="sendbox"><strong>שליחת השרטוט ללקוח לאישור</strong>' +
+        (ca && ca.status === 'changes' ? '<div class="st chg">הלקוח ביקש שינוי (' + fmt(ca.answeredAt) + '): ' + esc(ca.comment) + '<br>אחרי תיקון ושמירת השרטוט שולחים שוב.</div>'
+          : o.approvalSentAt ? '<div class="st">נשלח ב-' + fmt(o.approvalSentAt) + '. ממתין לתשובת הלקוח.</div>' : '') +
+        '<div class="row"><input id="ph-' + id + '" inputmode="tel" dir="ltr" placeholder="טלפון הלקוח" aria-label="טלפון הלקוח" value="' + esc(o.phone || '') + '">' +
+        '<input id="em-' + id + '" type="email" dir="ltr" placeholder="מייל הלקוח" aria-label="מייל הלקוח" value="' + esc(o.custEmail || '') + '">' +
+        '<button class="btn small" type="button" data-savecontact="' + id + '">שמור</button></div><div class="row">' +
+        (ph ? '<a class="btn small primary" target="_blank" rel="noopener" data-send="' + id + '" data-ch="WhatsApp" href="https://wa.me/' + ph + '?text=' + txt + '">WhatsApp</a>' +
+              '<a class="btn small" data-send="' + id + '" data-ch="SMS" href="sms:+' + ph + '?body=' + txt + '">SMS</a>' : '') +
+        (o.custEmail ? '<a class="btn small" data-send="' + id + '" data-ch="אימייל" href="mailto:' + esc(o.custEmail) + '?subject=' + encodeURIComponent('שרטוט הג\'קוזי שלך לאישור · MTI') + '&body=' + txt + '">אימייל</a>' : '') +
+        '<button class="btn small" type="button" data-copy="' + id + '">העתקת קישור</button></div>' +
+        (!ph && !o.custEmail ? '<div class="st">כדי לשלוח, מוסיפים טלפון או מייל של הלקוח ושומרים. אפשר גם להעתיק את הקישור ולשלוח ידנית.</div>' : '') + '</div>';
+    }
     if (!del && canWrite()) {
       h += '<div class="who">מי מעדכן עכשיו: ' + f.s.who + '</div>';
       if (f.hold) h += '<button class="btn primary big" type="button" data-unhold="' + id + '"' + busy + '>העיכוב הוסר, ממשיכים</button>';
@@ -206,6 +275,8 @@
       '<label for="nSys">מערכת<select id="nSys"><option>BASIC</option><option>TITANIUM</option><option>אחר</option></select></label>' +
       '<label for="nAgent">סוכן<select id="nAgent"><option value="">ללא סוכן</option>' + agents.map(function (a) { return '<option value="' + esc(a.email) + '">' + esc(a.name || a.email) + '</option>'; }).join('') + '</select></label>' +
       '<label for="nStore">חנות<input id="nStore" autocomplete="off"></label>' +
+      '<label for="nPhone">טלפון הלקוח<input id="nPhone" inputmode="tel" dir="ltr" autocomplete="off"></label>' +
+      '<label for="nEmail">מייל הלקוח<input id="nEmail" type="email" dir="ltr" autocomplete="off"></label>' +
       '<label class="chk" for="nPanel"><input id="nPanel" type="checkbox">הלקוח הזמין פאנל</label>' +
       '<label class="wide" for="nNotes">הערות<textarea id="nNotes" rows="2"></textarea></label></div>' +
       '<div class="row"><button class="btn primary" type="button" id="nSave">הוספה למעקב</button><button class="btn" type="button" id="nCancel">ביטול</button><span id="nErr" style="color:var(--bad)"></span></div>';
@@ -247,6 +318,17 @@
   }
   function event(key, note) { var ev = { s: key, at: new Date().toISOString(), by: me.email, byName: me.name || me.email }; if (note) ev.note = note; return ev; }
   function move(o, key, note) { var ev = event(key, note); return col.doc(o.id).update({ stage: key, stageAt: ev.at, hold: null, history: (o.history || []).concat([ev]) }); }
+  // The customer approved through the link: move the order on, once, whichever office screen sees it first.
+  function autoApprove(orderId, token, a) {
+    var ref = col.doc(orderId);
+    db.runTransaction(async function (tx) {
+      var s = await tx.get(ref); if (!s.exists) return; var o = s.data();
+      if (o.stage !== 'approval' || o.approvalToken !== token) return;
+      var ev = { s: 'kit', at: new Date().toISOString(), byName: 'הלקוח', note: 'אושר בקישור' + (a.answeredName ? ' על ידי ' + a.answeredName : '') };
+      tx.update(ref, { stage: 'kit', stageAt: ev.at, hold: null, history: (o.history || []).concat([ev]) });
+    }).catch(function () {});
+  }
+  function custAnswer(o) { var a = st.appr[o.id]; return a && a.token === o.approvalToken && IDX[o.stage] <= IDX.approval ? a : null; }
   function arm(key) { if (st.armed[key]) { st.armed[key] = false; return true; } st.armed[key] = true; setTimeout(function () { if (st.armed[key]) { st.armed[key] = false; st.usersDirty = true; render(); } }, 3500); st.usersDirty = true; render(); return false; }
 
   function openSketch(o) {
@@ -256,13 +338,28 @@
       model: model, system: o.system, data: o.sketch || null, readOnly: !edit || (!o.sketch && !edit),
       title: (o.customer || '') + (o.num ? ' · הזמנה ' + o.num : ''),
       readOnlyNote: IDX[o.stage] > IDX.approval ? 'השרטוט אושר על ידי הלקוח ונעול לעריכה.' : 'תצוגה בלבד.',
-      onSave: function (data, meta) { return col.doc(o.id).update({ sketch: data, sketchBlocking: !!meta.blocking, sketchAt: new Date().toISOString() }); }
+      onSave: function (data, meta) {
+        var token = o.approvalToken || newToken(), at = new Date().toISOString(), b = db.batch();
+        b.update(col.doc(o.id), { sketch: data, sketchBlocking: !!meta.blocking, sketchAt: at, approvalToken: token, approvalSentAt: null });
+        b.set(apCol.doc(token), { orderId: o.id, customer: o.customer || '', num: o.num || '', model: o.model, system: o.system || '', sketch: data, status: meta.blocking ? 'draft' : 'pending', updatedAt: at });
+        o.approvalToken = token;
+        return b.commit();
+      }
     });
   }
 
   $('list').addEventListener('click', function (ev) {
-    var b = ev.target.closest('button'); if (!b || b.disabled) return; var d = b.dataset, o;
-    if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); }
+    var a = ev.target.closest('a[data-send]'), o;
+    if (a && (o = find(a.dataset.send))) { // the link itself opens WhatsApp / SMS / mail; here we only record that it was sent
+      var upd = { approvalSentAt: new Date().toISOString(), approvalVia: a.dataset.ch };
+      if (o.stage === 'request' || o.stage === 'drawing') { var ev2 = event('approval', 'נשלח ללקוח ב-' + a.dataset.ch); upd.stage = 'approval'; upd.stageAt = ev2.at; upd.history = (o.history || []).concat([ev2]); }
+      col.doc(o.id).update(upd).catch(function () {});
+      return;
+    }
+    var b = ev.target.closest('button'); if (!b || b.disabled) return; var d = b.dataset;
+    if (d.savecontact && (o = find(d.savecontact))) { var pv = $('ph-' + o.id).value.trim(), em = $('em-' + o.id).value.trim(); document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ phone: pv, custEmail: em }); }); }
+    else if (d.copy && (o = find(d.copy))) { var link = custLink(o); (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () { b.textContent = 'הקישור הועתק'; }, function () { b.outerHTML = '<input readonly dir="ltr" value="' + esc(link) + '" onfocus="this.select()">'; }); }
+    else if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); }
     else if (d.sketch && (o = find(d.sketch))) { if (o.sketch || canDraw(o)) openSketch(o); }
     else if (d.next && (o = find(d.next))) { var nx = STAGES[IDX[o.stage] + 1]; if (nx && canAct(STAGES[IDX[o.stage]])) write(o.id, function () { return move(o, nx.k); }); }
     else if (d.fail && (o = find(d.fail))) { if (arm('fail' + o.id)) write(o.id, function () { return move(o, 'toBarkan', 'הבדיקה נכשלה, חוזר לברקן'); }); }
@@ -273,7 +370,7 @@
     }
     else if (d.unhold && (o = find(d.unhold))) write(o.id, function () { return col.doc(o.id).update({ hold: null }); });
     else if (d.undo && (o = find(d.undo))) { if (arm('undo' + o.id)) { var hs = (o.history || []).slice(0, -1), last = hs[hs.length - 1]; write(o.id, function () { return col.doc(o.id).update({ stage: last.s, stageAt: last.at, history: hs }); }); } }
-    else if (d.del && (o = find(d.del))) { if (arm('del' + o.id)) write(o.id, function () { return col.doc(o.id).delete(); }); }
+    else if (d.del && (o = find(d.del))) { if (arm('del' + o.id)) write(o.id, function () { if (o.approvalToken) apCol.doc(o.approvalToken).delete().catch(function () {}); return col.doc(o.id).delete(); }); }
   });
   $('tiles').addEventListener('click', function (ev) { var b = ev.target.closest('[data-loc]'); if (!b) return; st.loc = st.loc === b.dataset.loc ? '' : b.dataset.loc; st.tab = 'open'; render(); });
   $('tabs').addEventListener('click', function (ev) {
@@ -293,7 +390,7 @@
     var agentEmail = $('nAgent').value, ag = users.find(function (u) { return u.email === agentEmail; }), ev0 = event('request');
     ev.target.disabled = true;
     try {
-      await col.add({ num: num, customer: cust, model: $('nModel').value, system: $('nSys').value, panel: $('nPanel').checked, notes: $('nNotes').value.trim(), store: $('nStore').value.trim(),
+      await col.add({ num: num, customer: cust, model: $('nModel').value, system: $('nSys').value, panel: $('nPanel').checked, notes: $('nNotes').value.trim(), store: $('nStore').value.trim(), phone: $('nPhone').value.trim(), custEmail: $('nEmail').value.trim(), approvalToken: newToken(),
         agentEmail: agentEmail || '', agent: ag ? (ag.name || ag.email) : '', stage: 'request', stageAt: ev0.at, hold: null, history: [ev0], createdAt: ev0.at });
       st.form = false; render();
     } catch (e) { ev.target.disabled = false; $('nErr').textContent = 'ההזמנה לא נשמרה. נסו שוב.'; }
