@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261110-080854';
+  var APP_VERSION = '20261110-081252';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -100,6 +100,8 @@
   // The customer's link goes to s.html, a copy of the page whose title (what WhatsApp shows in the link preview) is about approving the sketch.
   function custLink(o) { return location.origin + location.pathname.replace(/[^\/]*$/, '') + 's.html?a=' + o.approvalToken; }
   function intlPhone(p) { var d = String(p || '').replace(/\D/g, ''); if (d.indexOf('972') === 0) return d; if (d.charAt(0) === '0') return '972' + d.slice(1); return d; }
+  // card title: the store first, then the end customer ("קרמיק דיפו - שמעון")
+  function titleOf(o) { return [o.store, o.customer].filter(Boolean).join(' - ') || 'ללא שם לקוח'; }
   function custMessage(o) { return 'שלום' + (o.customer ? ' ' + o.customer : '') + ', כאן MTI. מצורפת סקיצת הג\'קוזי שהזמנת' + (o.model ? ' (' + (MODEL[o.model] && MODEL[o.model].name || o.model) + ')' : '') + '. נא לבדוק את הקירות, פריסת הג\'טים ופתח השירות, ולאשר בקישור:\n' + custLink(o); }
   async function customerMode() {
     ['loginView', 'noAccessView', 'appView'].forEach(function (v) { $(v).hidden = true; });
@@ -236,9 +238,9 @@
     else if (o.stage === 'approval' && o.approvalSentAt) chips += '<span class="chip">נשלח ללקוח</span>';
     var eta = del ? 'סופק ב-' + fmt(o.stageAt) : f.hold ? 'אספקה צפויה: לא ידוע עד שהעיכוב יוסר'
       : 'בשלב הזה ' + dayWord(f.el) + ' · אספקה צפויה יום ' + DAYS[f.eta.getDay()] + "' " + pad(f.eta.getDate()) + '/' + pad(f.eta.getMonth() + 1);
-    var meta = [mname(o.model), o.system, o.panel ? 'כולל פאנל' : '', o.agent ? 'סוכן: ' + o.agent : '', o.store].filter(Boolean).map(esc).join(' · ');
+    var meta = [mname(o.model), o.system, o.panel ? 'כולל פאנל' : '', o.agent ? 'סוכן: ' + o.agent : ''].filter(Boolean).map(esc).join(' · ');
     var h = '<div class="card' + (f.hold ? ' hold' : f.late ? ' late' : '') + '" style="--lc:' + LOCC[f.s.loc] + '"><button type="button" data-open="' + esc(o.id) + '" aria-expanded="' + open + '">' +
-      '<div class="c-top"><span class="c-cust">' + esc(o.customer || 'ללא שם לקוח') + '</span><span class="c-num">' + [o.tubNum ? 'סידורי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · ') + '</span></div>' +
+      '<div class="c-top"><span class="c-cust">' + esc(titleOf(o)) + '</span><span class="c-num">' + [o.tubNum ? 'סידורי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · ') + '</span></div>' +
       (meta ? '<div class="c-meta">' + meta + '</div>' : '') + '<div class="c-stage">' + chips + '</div>' + (del ? '' : stepsBar(f.i)) + '<div class="c-eta">' + eta + '</div></button>';
     if (open) h += detailHtml(o, f);
     return h + '</div>';
@@ -394,7 +396,7 @@
     var edit = canDraw(o);
     Sketch.open($('sketchView'), {
       model: model, system: o.system, data: o.sketch || null, readOnly: !edit || (!o.sketch && !edit),
-      title: (o.customer || '') + (o.num ? ' · הזמנה ' + o.num : ''),
+      title: titleOf(o) + (o.num ? ' · הזמנה ' + o.num : ''),
       readOnlyNote: IDX[o.stage] > IDX.approval ? 'השרטוט אושר על ידי הלקוח ונעול לעריכה.' : 'תצוגה בלבד.',
       onSave: function (data, meta) {
         var token = o.approvalToken || newToken(), at = new Date().toISOString(), b = db.batch();
