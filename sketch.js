@@ -1,4 +1,4 @@
-// Drawing screen: top view of one jacuzzi with walls, jets, faucet, motor and service opening.
+// Drawing screen: top view of one jacuzzi with walls, jets (2" or 3"), faucet, hand shower and service opening.
 // Sketch.open(host, { model, system, data, readOnly, customer, title, onSave(data) -> Promise, onClose() })
 // All positions are in centimetres from the tub's top-left corner (back wall, left end).
 window.Sketch = (function () {
@@ -39,13 +39,11 @@ window.Sketch = (function () {
       var items = [];
       function add(type, x, y, side) { var it = { id: 's' + (++uid), type: type, x: x, y: y, std: { x: x, y: y } }; if (type === 'jet') { it.size = 3; it.std.size = 3; } if (side) { it.side = side; it.std.side = side; } items.push(it); }
       ((tpl && tpl[system]) || []).forEach(function (p) { add('jet', p[0], p[1]); });
-      if (model.sides) { // right-handed layout: the square corner is top right, the motor sits under that end
-        add('motor', W - 16, H - 14);
+      if (model.sides) { // right-handed layout: the square corner is top right
         add('service', W - 26, H, 'bottom');
       } else {
         add('ctrl', 4.2, H - 7.9);
         add('air', 8.9, H - 4.8);
-        add('motor', 22, H - 22);
         add('service', Math.min(24, W / 2), H, 'bottom');
       }
       return items;
@@ -53,8 +51,9 @@ window.Sketch = (function () {
     function fresh() { return { finish: 'grey', side: null, items: template(), removed: [], walls: { top: true, right: true, bottom: false, left: false }, notes: '' }; }
     var S = opt.data ? JSON.parse(JSON.stringify(opt.data)) : fresh();
     S.items = S.items || []; S.removed = S.removed || []; S.walls = S.walls || {};
-    // suction is no longer drawn; drop it from drawings saved before that change
-    S.items = S.items.filter(function (i) { return i.type !== 'suction'; }); S.removed = S.removed.filter(function (i) { return i.type !== 'suction'; });
+    // suction and motor are no longer drawn (only the service opening is); drop them from drawings saved before that change
+    function drawn(i) { return i.type !== 'suction' && i.type !== 'motor'; }
+    S.items = S.items.filter(drawn); S.removed = S.removed.filter(drawn);
     S.items.concat(S.removed).forEach(function (i) { var n = +String(i.id).slice(1); if (n > uid) uid = n; });
 
     host.innerHTML =
@@ -197,10 +196,8 @@ window.Sketch = (function () {
     function issues() {
       var out = [], svc = S.items.filter(function (i) { return i.type === 'service'; }), motors = S.items.filter(function (i) { return i.type === 'motor'; });
       if (model.sides && !S.side) out.push(['bad', 'לא נבחר כיוון האמבטיה: ימין או שמאל.']);
-      if (!motors.length) out.push(['bad', 'אין מנוע בשרטוט.']);
-      if (!svc.length) out.push(['bad', 'אין פתח שירות. בלי פתח אי אפשר להגיע למנוע אחרי ההתקנה.']);
+      if (!svc.length) out.push(['bad', 'אין פתח שירות בשרטוט.']);
       svc.forEach(function (s) { if (S.walls[s.side]) out.push(['bad', 'פתח השירות בצד ה' + SIDES[s.side] + ', ושם מסומן קיר. צריך להעביר את הפתח לצד פתוח.']); });
-      motors.forEach(function (m) { if (!svc.length) return; var d = Math.min.apply(null, svc.map(function (s) { return motorToService(m, s); })); if (d > 45) out.push(['warn', 'המנוע רחוק ' + r1(d) + ' ' + CM + ' מפתח השירות. קשה יהיה להגיע אליו.']); });
       if (!Object.keys(SIDES).some(function (k) { return !S.walls[k]; })) out.push(['bad', 'האמבטיה סגורה בקירות מכל ארבעת הצדדים. אין מאיפה לגשת.']);
       var jets = S.items.filter(function (i) { return i.type === 'jet'; }), close = 0;
       for (var a = 0; a < jets.length; a++) for (var b = a + 1; b < jets.length; b++) if (dist(jets[a], jets[b]) < 6) close++;
@@ -210,7 +207,7 @@ window.Sketch = (function () {
     }
     function renderLists() {
       var list = issues();
-      $('skIssues').innerHTML = list.length ? list.map(function (i) { return '<div class="issue ' + i[0] + '">' + esc(i[1]) + '</div>'; }).join('') : '<div class="issue ok">השרטוט תקין: יש גישה למנוע דרך פתח השירות.</div>';
+      $('skIssues').innerHTML = list.length ? list.map(function (i) { return '<div class="issue ' + i[0] + '">' + esc(i[1]) + '</div>'; }).join('') : '<div class="issue ok">השרטוט תקין: פתח השירות פונה לצד פתוח.</div>';
       var li = [], walls = Object.keys(SIDES).filter(function (k) { return S.walls[k]; }).map(function (k) { return SIDES[k]; });
       if (model.sides) li.push('<li><span class="dot wall"></span><span>כיוון האמבטיה: ' + (S.side === 'R' ? 'ימין' : S.side === 'L' ? 'שמאל' : 'לא נבחר') + '</span></li>');
       li.push('<li><span class="dot wall"></span><span>קירות: ' + (walls.length ? walls.join(', ') : 'אין (אמבטיה חופשית)') + '</span></li>');
@@ -248,13 +245,13 @@ window.Sketch = (function () {
         return '<button class="btn' + (S.finish === f[0] ? ' primary' : '') + '" type="button" data-finish="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('');
       var hasMotor = S.items.some(function (i) { return i.type === 'motor'; });
       $('skPalWrap').hidden = readOnly;
-      $('skPal').innerHTML = [['jet', 2], ['jet', 3], ['faucet'], ['shower'], ['service'], ['motor']].map(function (p) {
+      $('skPal').innerHTML = [['jet', 2], ['jet', 3], ['faucet'], ['shower'], ['service']].map(function (p) {
         var t = p[0], demo = { type: t, size: p[1] };
         var vb = t === 'service' ? '-22 -8 44 16' : t === 'motor' ? '-13 -10 26 20' : '-5 -5 10 10';
         return '<button class="btn" type="button" data-add="' + t + '"' + (p[1] ? ' data-size="' + p[1] + '"' : '') + (t === 'motor' && hasMotor ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol(demo, true) + '</svg><span>' + nameOf(demo) + '</span></button>'; }).join('');
       $('skHint').textContent = readOnly ? (opt.readOnlyNote || 'תצוגה בלבד.') : 'גוררים פריט כדי להזיז. לוחצים על צד של האמבטיה כדי להוסיף או להסיר קיר.';
       var note = $('skNote'); note.hidden = !!(tpl && tpl[system]) || readOnly;
-      note.textContent = "לדגם הזה עדיין אין תבנית ג'טים סטנדרטית, אז מסמנים את הג'טים ידנית. מיקום המנוע ופתח השירות הוא נקודת התחלה בלבד.";
+      note.textContent = "לדגם הזה עדיין אין תבנית ג'טים סטנדרטית, אז מסמנים את הג'טים ידנית. מיקום פתח השירות הוא נקודת התחלה בלבד.";
       $('skSave').hidden = readOnly; $('skSave').disabled = saving || !dirty; $('skSave').textContent = saving ? 'שומר…' : dirty ? 'שמירת השרטוט' : 'נשמר';
       $('skReset').hidden = readOnly; $('skReset').textContent = armed.reset ? 'ללחוץ שוב כדי לאפס' : 'איפוס לסטנדרט';
       $('skClose').textContent = armed.close ? 'לצאת בלי לשמור?' : 'חזרה ללוח';
