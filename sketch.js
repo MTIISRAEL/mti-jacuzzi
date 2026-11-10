@@ -20,7 +20,6 @@ window.Sketch = (function () {
   // Standard jet layouts, measured from the catalog renders. Only MTI-114 has them so far.
   var TEMPLATES = {
     'MTI-114': {
-      img: { href: 'img/mti-114.jpg', x: -15.76, y: -29.81, w: 171.96, h: 129.6 },
       BASIC: [[75, 14.1], [75, 55.4], [29.8, 27.8], [29.8, 41.2], [120.5, 27.8], [120.5, 40.8]],
       TITANIUM: [[54.5, 14.1], [97, 14.5], [54.7, 55.6], [97, 55.2], [26.5, 27.1], [35.7, 28.5], [26.5, 42.6], [35.7, 41.2], [120.5, 28.1], [120.5, 41.8]]
     }
@@ -40,16 +39,22 @@ window.Sketch = (function () {
       var items = [];
       function add(type, x, y, side) { var it = { id: 's' + (++uid), type: type, x: x, y: y, std: { x: x, y: y } }; if (side) { it.side = side; it.std.side = side; } items.push(it); }
       ((tpl && tpl[system]) || []).forEach(function (p) { add('jet', p[0], p[1]); });
-      add('suction', W * 0.606, H - 12.4);
-      add('ctrl', 4.2, H - 7.9);
-      add('air', 8.9, H - 4.8);
-      add('motor', 22, H - 22);
-      add('service', Math.min(24, W / 2), H, 'bottom');
+      if (model.sides) { // right-handed layout: the square corner is top right, the motor sits under that end
+        add('motor', W - 16, H - 14);
+        add('service', W - 26, H, 'bottom');
+      } else {
+        add('ctrl', 4.2, H - 7.9);
+        add('air', 8.9, H - 4.8);
+        add('motor', 22, H - 22);
+        add('service', Math.min(24, W / 2), H, 'bottom');
+      }
       return items;
     }
-    function fresh() { return { finish: 'grey', items: template(), removed: [], walls: { top: true, right: true, bottom: false, left: false }, notes: '' }; }
+    function fresh() { return { finish: 'grey', side: null, items: template(), removed: [], walls: { top: true, right: true, bottom: false, left: false }, notes: '' }; }
     var S = opt.data ? JSON.parse(JSON.stringify(opt.data)) : fresh();
     S.items = S.items || []; S.removed = S.removed || []; S.walls = S.walls || {};
+    // suction is no longer drawn; drop it from drawings saved before that change
+    S.items = S.items.filter(function (i) { return i.type !== 'suction'; }); S.removed = S.removed.filter(function (i) { return i.type !== 'suction'; });
     S.items.concat(S.removed).forEach(function (i) { var n = +String(i.id).slice(1); if (n > uid) uid = n; });
 
     host.innerHTML =
@@ -57,6 +62,7 @@ window.Sketch = (function () {
       '<div class="head"><div><h1>שרטוט · ' + esc(model.code) + '</h1><div class="sub">' + esc(opt.title || '') + ' · ' + esc(model.dims) + ' ' + CM + (system ? ' · ' + esc(system) : '') + '</div></div>' +
       '<div class="row"><button class="btn primary" type="button" id="skSave" hidden>שמירת השרטוט</button><button class="btn" type="button" id="skClose">חזרה ללוח</button></div></div>' +
       '<div class="banner" id="skNote" hidden></div>' +
+      '<div class="row" id="skSide"></div>' +
       '<div class="row" id="skFinish"></div>' +
       '<div class="board"><svg id="skSvg" viewBox="-20 -20 ' + (W + 40) + ' ' + (H + 32) + '" role="img" aria-label="מבט על של האמבטיה"></svg>' +
       '<div class="legend"><span><i style="background:var(--warn)"></i>הוזז מהסטנדרט</span><span><i style="background:var(--ok)"></i>נוסף</span><span><i style="background:var(--bad)"></i>הוסר</span></div>' +
@@ -136,7 +142,10 @@ window.Sketch = (function () {
       return o;
     }
     function tubSvg() {
-      if (tpl && tpl.img) return '<image href="' + tpl.img.href + '" x="' + tpl.img.x + '" y="' + tpl.img.y + '" width="' + tpl.img.w + '" height="' + tpl.img.h + '" preserveAspectRatio="none" clip-path="url(#skClip)"/>';
+      if (model.img) return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><image href="img/' + model.code + (model.sides ? '-' + (S.side || 'R') : '') + '.jpg" x="0" y="0" width="' + W + '" height="' + H + '" preserveAspectRatio="none"/>';
+      // no picture for this model yet: a plain outline at the model's size
+      if (model.shape === 'corner') return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><path d="M0 0H' + W + 'V' + H + 'H' + (W * 0.72) + 'Q' + (W * 0.05) + ' ' + (H * 0.95) + ' 0 ' + (H * 0.28) + 'Z" fill="#f1efed" stroke="#cfcac6" stroke-width=".6"/>' +
+        '<path d="M' + (W * 0.14) + ' ' + (H * 0.12) + 'H' + (W * 0.88) + 'V' + (H * 0.86) + 'H' + (W * 0.74) + 'Q' + (W * 0.16) + ' ' + (H * 0.84) + ' ' + (W * 0.14) + ' ' + (H * 0.3) + 'Z" fill="#fbfaf9" stroke="#cfcac6" stroke-width=".6"/>';
       var o = '<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="1" fill="#f1efed"/>';
       if (model.shape === 'round') o += '<ellipse cx="' + W / 2 + '" cy="' + H / 2 + '" rx="' + (W / 2 - 7) + '" ry="' + (H / 2 - 7) + '" fill="#fbfaf9" stroke="#cfcac6" stroke-width=".6"/>';
       else o += '<rect x="7" y="7" width="' + (W - 14) + '" height="' + (H - 14) + '" rx="' + Math.min(18, H / 3) + '" fill="#fbfaf9" stroke="#cfcac6" stroke-width=".6"/>';
@@ -146,7 +155,7 @@ window.Sketch = (function () {
       var o = '<defs><clipPath id="skClip"><rect x="0" y="0" width="' + W + '" height="' + H + '" rx="1"/></clipPath>' +
         '<pattern id="skHatch" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1" height="3" fill="rgba(0,0,0,.22)"/></pattern></defs>';
       o += wallSvg() + tubSvg();
-      o += '<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="1" fill="none" stroke="var(--muted)" stroke-width=".5"/>';
+      if (!model.sides && model.shape !== 'corner') o += '<rect x="0" y="0" width="' + W + '" height="' + H + '" rx="1" fill="none" stroke="var(--muted)" stroke-width=".5"/>';
       o += '<path d="M0 -14H' + W + 'M0 -16V-12M' + W + ' -16V-12" stroke="var(--muted)" stroke-width=".4" fill="none"/>' +
         '<rect x="' + (W / 2 - 13) + '" y="-17.2" width="26" height="6.4" fill="var(--surface)"/><text class="t-dim" text-anchor="middle" x="' + (W / 2) + '" y="-12.4">' + W + ' ' + CM + '</text>' +
         '<path d="M-14 0V' + H + 'M-16 0H-12M-16 ' + H + 'H-12" stroke="var(--muted)" stroke-width=".4" fill="none"/>' +
@@ -182,6 +191,7 @@ window.Sketch = (function () {
     }
     function issues() {
       var out = [], svc = S.items.filter(function (i) { return i.type === 'service'; }), motors = S.items.filter(function (i) { return i.type === 'motor'; });
+      if (model.sides && !S.side) out.push(['bad', 'לא נבחר כיוון האמבטיה: ימין או שמאל.']);
       if (!motors.length) out.push(['bad', 'אין מנוע בשרטוט.']);
       if (!svc.length) out.push(['bad', 'אין פתח שירות. בלי פתח אי אפשר להגיע למנוע אחרי ההתקנה.']);
       svc.forEach(function (s) { if (S.walls[s.side]) out.push(['bad', 'פתח השירות בצד ה' + SIDES[s.side] + ', ושם מסומן קיר. צריך להעביר את הפתח לצד פתוח.']); });
@@ -197,6 +207,7 @@ window.Sketch = (function () {
       var list = issues();
       $('skIssues').innerHTML = list.length ? list.map(function (i) { return '<div class="issue ' + i[0] + '">' + esc(i[1]) + '</div>'; }).join('') : '<div class="issue ok">השרטוט תקין: יש גישה למנוע דרך פתח השירות.</div>';
       var li = [], walls = Object.keys(SIDES).filter(function (k) { return S.walls[k]; }).map(function (k) { return SIDES[k]; });
+      if (model.sides) li.push('<li><span class="dot wall"></span><span>כיוון האמבטיה: ' + (S.side === 'R' ? 'ימין' : S.side === 'L' ? 'שמאל' : 'לא נבחר') + '</span></li>');
       li.push('<li><span class="dot wall"></span><span>קירות: ' + (walls.length ? walls.join(', ') : 'אין (אמבטיה חופשית)') + '</span></li>');
       S.items.forEach(function (it) {
         var st = status(it);
@@ -205,7 +216,7 @@ window.Sketch = (function () {
       });
       S.removed.forEach(function (it) { li.push('<li><span class="dot removed"></span><span>הוסר ' + TYPES[it.type].name + ' סטנדרטי</span></li>'); });
       if (S.finish === 'white') li.push('<li><span class="dot added"></span><span>' + "גימור ג'טים לבן (שדרוג)" + '</span></li>');
-      if (li.length === 1) li.push('<li class="empty">אין שינויים מהתבנית הסטנדרטית.</li>');
+      if (li.length === (model.sides ? 2 : 1)) li.push('<li class="empty">אין שינויים מהתבנית הסטנדרטית.</li>');
       $('skChanges').innerHTML = li.join('');
       var c = counts(S.items), std = counts(template()), rows = '';
       ORDER.forEach(function (t) {
@@ -218,11 +229,14 @@ window.Sketch = (function () {
     }
     function renderAll() {
       renderBoard(); renderSel(); renderLists();
+      $('skSide').hidden = !model.sides || !!opt.customer;
+      if (model.sides) $('skSide').innerHTML = '<span>כיוון האמבטיה:</span>' + [['R', 'ימין'], ['L', 'שמאל']].map(function (f) {
+        return '<button class="btn' + (S.side === f[0] ? ' primary' : '') + '" type="button" data-side="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('') + (S.side ? '' : '<span class="who">צריך לבחור</span>');
       $('skFinish').innerHTML = '<span>' + "גימור ג'טים:" + '</span>' + [['grey', 'אפור · סטנדרט'], ['white', 'לבן · שדרוג']].map(function (f) {
         return '<button class="btn' + (S.finish === f[0] ? ' primary' : '') + '" type="button" data-finish="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('');
       var hasMotor = S.items.some(function (i) { return i.type === 'motor'; });
       $('skPalWrap').hidden = readOnly;
-      $('skPal').innerHTML = ['jet', 'faucet', 'shower', 'service', 'suction', 'motor'].map(function (t) {
+      $('skPal').innerHTML = ['jet', 'faucet', 'shower', 'service', 'motor'].map(function (t) {
         var vb = t === 'service' ? '-22 -8 44 16' : t === 'motor' ? '-13 -10 26 20' : '-5 -5 10 10';
         return '<button class="btn" type="button" data-add="' + t + '"' + (t === 'motor' && hasMotor ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol({ type: t }, true) + '</svg><span>' + TYPES[t].name + '</span></button>'; }).join('');
       $('skHint').textContent = readOnly ? (opt.readOnlyNote || 'תצוגה בלבד.') : 'גוררים פריט כדי להזיז. לוחצים על צד של האמבטיה כדי להוסיף או להסיר קיר.';
@@ -288,6 +302,15 @@ window.Sketch = (function () {
       else if (t === 'motor') place(it, 22, H - 22);
       else place(it, W * 0.4 + (n % 6) * 8, H / 2);
       S.items.push(it); selId = it.id; touch();
+    });
+    $('skSide').addEventListener('click', function (ev) {
+      var b = ev.target.closest('button[data-side]'); if (!b || b.disabled || b.dataset.side === S.side) return;
+      if ((S.side || 'R') !== b.dataset.side) { // the drawing starts right-handed; switching hand mirrors it left to right
+        var flip = function (it) { it.x = W - it.x; if (it.side === 'left') it.side = 'right'; else if (it.side === 'right') it.side = 'left'; };
+        S.items.forEach(function (it) { flip(it); if (it.std) flip(it.std); }); S.removed.forEach(function (it) { if (it.std) flip(it.std); });
+        var l = S.walls.left; S.walls.left = S.walls.right; S.walls.right = l;
+      }
+      S.side = b.dataset.side; touch();
     });
     $('skFinish').addEventListener('click', function (ev) { var b = ev.target.closest('button[data-finish]'); if (!b || b.disabled) return; S.finish = b.dataset.finish; touch(); });
     $('skReset').addEventListener('click', function () { if (readOnly) return; if (arm('reset')) { var notes = S.notes; uid = 0; S = fresh(); S.notes = notes; selId = null; touch(); } });

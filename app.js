@@ -206,7 +206,7 @@
       : 'בשלב הזה ' + dayWord(f.el) + ' · אספקה צפויה יום ' + DAYS[f.eta.getDay()] + "' " + pad(f.eta.getDate()) + '/' + pad(f.eta.getMonth() + 1);
     var meta = [o.model, o.system, o.panel ? 'כולל פאנל' : '', o.agent ? 'סוכן: ' + o.agent : '', o.store].filter(Boolean).map(esc).join(' · ');
     var h = '<div class="card' + (f.hold ? ' hold' : f.late ? ' late' : '') + '" style="--lc:' + LOCC[f.s.loc] + '"><button type="button" data-open="' + esc(o.id) + '" aria-expanded="' + open + '">' +
-      '<div class="c-top"><span class="c-cust">' + esc(o.customer || 'ללא שם לקוח') + '</span><span class="c-num">' + [o.tubNum ? 'ג\'קוזי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · ') + '</span></div>' +
+      '<div class="c-top"><span class="c-cust">' + esc(o.customer || 'ללא שם לקוח') + '</span><span class="c-num">' + [o.tubNum ? 'סידורי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · ') + '</span></div>' +
       (meta ? '<div class="c-meta">' + meta + '</div>' : '') + '<div class="c-stage">' + chips + '</div>' + (del ? '' : stepsBar(f.i)) + '<div class="c-eta">' + eta + '</div></button>';
     if (open) h += detailHtml(o, f);
     return h + '</div>';
@@ -214,7 +214,7 @@
   function detailHtml(o, f) {
     var id = esc(o.id), busy = st.busy[o.id] ? ' disabled' : '', del = o.stage === 'delivered', h = '<div class="detail">';
     if (o.notes) h += '<div class="notes">' + esc(o.notes) + '</div>';
-    if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר ג\'קוזי</label><input id="tn-' + id + '" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
+    if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר סידורי</label><input id="tn-' + id + '" inputmode="numeric" maxlength="4" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
     if (MODEL[o.model]) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
     if (isOffice() && o.approvalToken && o.sketch && !o.sketchBlocking && IDX[o.stage] <= IDX.approval) {
       var ph = intlPhone(o.phone), txt = encodeURIComponent(custMessage(o)), ca = custAnswer(o);
@@ -271,7 +271,7 @@
     var agents = users.filter(function (u) { return u.role === 'agent'; });
     f.innerHTML = '<h2>הזמנה חדשה למעקב</h2><div class="grid">' +
       '<label for="nNum">מס\' הזמנה באינטגרל<input id="nNum" inputmode="numeric" autocomplete="off"></label>' +
-      '<label for="nTub">מספר ג\'קוזי (ידני)<input id="nTub" autocomplete="off"></label>' +
+      '<label for="nTub">מספר סידורי (4 ספרות)<input id="nTub" inputmode="numeric" maxlength="4" autocomplete="off"></label>' +
       '<label for="nCust">לקוח<input id="nCust" autocomplete="off"></label>' +
       '<label for="nModel">דגם אמבטיה<select id="nModel"><option value="">בחירת דגם</option>' + MODELS.map(function (m) { return '<option value="' + m.code + '">' + m.code + ' · ' + m.dims + '</option>'; }).join('') + '</select></label>' +
       '<label for="nSys">מערכת<select id="nSys"><option>BASIC</option><option>TITANIUM</option><option>אחר</option></select></label>' +
@@ -359,7 +359,7 @@
       return;
     }
     var b = ev.target.closest('button'); if (!b || b.disabled) return; var d = b.dataset;
-    if (d.savetub && (o = find(d.savetub))) { var tv = $('tn-' + o.id).value.trim().slice(0, 40); document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ tubNum: tv }); }); }
+    if (d.savetub && (o = find(d.savetub))) { var tv = $('tn-' + o.id).value.trim(); if (!/^\d{4}$/.test(tv)) { $('banner').hidden = false; $('banner').textContent = 'מספר סידורי הוא 4 ספרות.'; return; } document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ tubNum: tv }); }); }
     else if (d.savecontact && (o = find(d.savecontact))) { var pv = $('ph-' + o.id).value.trim(), em = $('em-' + o.id).value.trim(); document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ phone: pv, custEmail: em }); }); }
     else if (d.copy && (o = find(d.copy))) { var link = custLink(o); (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () { b.textContent = 'הקישור הועתק'; }, function () { b.outerHTML = '<input readonly dir="ltr" value="' + esc(link) + '" onfocus="this.select()">'; }); }
     else if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); }
@@ -390,6 +390,7 @@
     if (ev.target.id !== 'nSave') return;
     var cust = $('nCust').value.trim(), num = $('nNum').value.trim();
     if (!cust && !num) { $('nErr').textContent = 'צריך לפחות שם לקוח או מספר הזמנה.'; return; }
+    if (!/^\d{4}$/.test($('nTub').value.trim())) { $('nErr').textContent = 'צריך מספר סידורי בן 4 ספרות.'; return; }
     var agentEmail = $('nAgent').value, ag = users.find(function (u) { return u.email === agentEmail; }), ev0 = event('request');
     ev.target.disabled = true;
     try {
