@@ -61,7 +61,7 @@ window.Sketch = (function () {
 
     host.innerHTML =
       '<div class="wrap">' +
-      '<div class="head"><div><h1>שרטוט · ' + esc(model.code) + '</h1><div class="sub">' + esc(opt.title || '') + ' · ' + esc(model.dims) + ' ' + CM + (system ? ' · ' + esc(system) : '') + '</div></div>' +
+      '<div class="head"><div><h1>שרטוט · ' + esc(model.name || model.code) + '</h1><div class="sub">' + esc(opt.title || '') + ' · ' + esc(model.dims) + ' ' + CM + (system ? ' · ' + esc(system) : '') + '</div></div>' +
       '<div class="row"><button class="btn primary" type="button" id="skSave" hidden>שמירת השרטוט</button><button class="btn" type="button" id="skClose">חזרה ללוח</button></div></div>' +
       '<div class="banner" id="skNote" hidden></div>' +
       '<div class="row" id="skSide"></div>' +
@@ -151,7 +151,7 @@ window.Sketch = (function () {
       return o;
     }
     function tubSvg() {
-      if (model.img) return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><image href="img/' + model.code + (model.sides ? '-' + (S.side || 'R') : '') + '.jpg" x="0" y="0" width="' + W + '" height="' + H + '" preserveAspectRatio="none"/>';
+      if (model.img) return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><image href="img/' + (model.base || model.code) + (model.sides ? '-' + (S.side || 'R') : '') + '.jpg" x="0" y="0" width="' + W + '" height="' + H + '" preserveAspectRatio="none"/>';
       // no picture for this model yet: a plain outline at the model's size
       if (model.shape === 'corner') return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><path d="M0 0H' + W + 'V' + H + 'H' + (W * 0.72) + 'Q' + (W * 0.05) + ' ' + (H * 0.95) + ' 0 ' + (H * 0.28) + 'Z" fill="#f1efed" stroke="#cfcac6" stroke-width=".6"/>' +
         '<path d="M' + (W * 0.14) + ' ' + (H * 0.12) + 'H' + (W * 0.88) + 'V' + (H * 0.86) + 'H' + (W * 0.74) + 'Q' + (W * 0.16) + ' ' + (H * 0.84) + ' ' + (W * 0.14) + ' ' + (H * 0.3) + 'Z" fill="#fbfaf9" stroke="#cfcac6" stroke-width=".6"/>';
@@ -217,7 +217,7 @@ window.Sketch = (function () {
       if (close) out.push(['warn', "יש ג'טים במרחק של פחות מ-6 " + CM + ' זה מזה.']);
       if (jetsStd && jets.length !== jetsStd) {
         if (S.jetOk === jets.length) out.push(['warn', "חריגה מאושרת: " + jets.length + " ג'טים במקום " + jetsStd + ' שבקטלוג.']);
-        else out.push(['bad', 'לפי הקטלוג, ב-' + model.code + ' עם ' + system + ' יש ' + jetsStd + " ג'טים. בשרטוט מסומנים " + jets.length + '.', 'jetok']);
+        else out.push(['bad', 'לפי הקטלוג, ב-' + (model.name || model.code) + ' עם ' + system + ' יש ' + jetsStd + " ג'טים. בשרטוט מסומנים " + jets.length + '.', 'jetok']);
       }
       if (system === 'TITANIUM' && model.jb && !model.jt) out.push(['warn', 'לפי הקטלוג אין לדגם הזה מערכת TITANIUM.']);
       return out;

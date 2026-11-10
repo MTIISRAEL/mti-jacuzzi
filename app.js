@@ -35,6 +35,8 @@
   var HOLDS = ['חסר חלק', 'ממתין ללקוח', 'תקלה באמבטיה'];
   var DAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
   var MODELS = window.MTI_MODELS || [], MODEL = {}; MODELS.forEach(function (m) { MODEL[m.code] = m; });
+  // what to show for a stored model code: the model name, plus the size when the model comes in more than one
+  function mname(code) { var m = MODEL[code]; return !m ? (code || '') : m.name ? m.name + ' (' + m.dims + ')' : m.code; }
 
   var me = null, col = db.collection('orders'), usersCol = db.collection('users'), apCol = db.collection('approvals'), unsub = [], users = [];
   // Serial numbers run on their own: meta/counters.serial holds the next one to hand out.
@@ -77,7 +79,7 @@
   // The customer's link goes to s.html, a copy of the page whose title (what WhatsApp shows in the link preview) is about approving the sketch.
   function custLink(o) { return location.origin + location.pathname.replace(/[^\/]*$/, '') + 's.html?a=' + o.approvalToken; }
   function intlPhone(p) { var d = String(p || '').replace(/\D/g, ''); if (d.indexOf('972') === 0) return d; if (d.charAt(0) === '0') return '972' + d.slice(1); return d; }
-  function custMessage(o) { return 'שלום' + (o.customer ? ' ' + o.customer : '') + ', כאן MTI. מצורפת סקיצת הג\'קוזי שהזמנת' + (o.model ? ' (' + o.model + ')' : '') + '. נא לבדוק את הקירות, פריסת הג\'טים ופתח השירות, ולאשר בקישור:\n' + custLink(o); }
+  function custMessage(o) { return 'שלום' + (o.customer ? ' ' + o.customer : '') + ', כאן MTI. מצורפת סקיצת הג\'קוזי שהזמנת' + (o.model ? ' (' + (MODEL[o.model] && MODEL[o.model].name || o.model) + ')' : '') + '. נא לבדוק את הקירות, פריסת הג\'טים ופתח השירות, ולאשר בקישור:\n' + custLink(o); }
   async function customerMode() {
     ['loginView', 'noAccessView', 'appView'].forEach(function (v) { $(v).hidden = true; });
     $('custView').hidden = false; document.title = 'MTI · אישור סקיצה לג\'קוזי';
@@ -88,7 +90,7 @@
     var model = d && MODEL[d.model];
     if (!d || !model || !d.sketch) { msg('הקישור אינו תקף. אפשר לבקש מ-MTI קישור חדש.'); return; }
     if (d.status === 'draft') { msg('הסקיצה עדיין בהכנה. נשלח קישור כשתהיה מוכנה.'); return; }
-    $('custSub').textContent = [d.customer, d.model + ' · ' + model.dims + ' ס"מ', d.system].filter(Boolean).join(' · ');
+    $('custSub').textContent = [d.customer, (model.name || model.code) + ' · ' + model.dims + ' ס"מ', d.system].filter(Boolean).join(' · ');
     Sketch.open($('custSketch'), { model: model, system: d.system, data: d.sketch, readOnly: true, customer: true,
       readOnlyNote: 'בדקו את הקירות, פריסת הג\'טים ופתח השירות.' });
     var box = $('custApprove'); box.hidden = false;
@@ -213,7 +215,7 @@
     else if (o.stage === 'approval' && o.approvalSentAt) chips += '<span class="chip">נשלח ללקוח</span>';
     var eta = del ? 'סופק ב-' + fmt(o.stageAt) : f.hold ? 'אספקה צפויה: לא ידוע עד שהעיכוב יוסר'
       : 'בשלב הזה ' + dayWord(f.el) + ' · אספקה צפויה יום ' + DAYS[f.eta.getDay()] + "' " + pad(f.eta.getDate()) + '/' + pad(f.eta.getMonth() + 1);
-    var meta = [o.model, o.system, o.panel ? 'כולל פאנל' : '', o.agent ? 'סוכן: ' + o.agent : '', o.store].filter(Boolean).map(esc).join(' · ');
+    var meta = [mname(o.model), o.system, o.panel ? 'כולל פאנל' : '', o.agent ? 'סוכן: ' + o.agent : '', o.store].filter(Boolean).map(esc).join(' · ');
     var h = '<div class="card' + (f.hold ? ' hold' : f.late ? ' late' : '') + '" style="--lc:' + LOCC[f.s.loc] + '"><button type="button" data-open="' + esc(o.id) + '" aria-expanded="' + open + '">' +
       '<div class="c-top"><span class="c-cust">' + esc(o.customer || 'ללא שם לקוח') + '</span><span class="c-num">' + [o.tubNum ? 'סידורי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · ') + '</span></div>' +
       (meta ? '<div class="c-meta">' + meta + '</div>' : '') + '<div class="c-stage">' + chips + '</div>' + (del ? '' : stepsBar(f.i)) + '<div class="c-eta">' + eta + '</div></button>';
@@ -285,7 +287,7 @@
       '<label for="nNum">מס\' הזמנה באינטגרל<input id="nNum" inputmode="numeric" autocomplete="off"></label>' +
       '<label for="nTub">מספר סידורי (ניתן אוטומטית)<input id="nTub" readonly value="' + pad4(st.nextSerial) + '"></label>' +
       '<label for="nCust">לקוח<input id="nCust" autocomplete="off"></label>' +
-      '<label for="nModel">דגם אמבטיה<select id="nModel"><option value="">בחירת דגם</option>' + MODELS.map(function (m) { return '<option value="' + m.code + '">' + m.code + ' · ' + m.dims + '</option>'; }).join('') + '</select></label>' +
+      '<label for="nModel">דגם אמבטיה<select id="nModel"><option value="">בחירת דגם</option>' + MODELS.map(function (m) { return '<option value="' + m.code + '">' + (m.name || m.code) + ' · ' + m.dims + '</option>'; }).join('') + '</select></label>' +
       '<label for="nSys">מערכת<select id="nSys"><option>BASIC</option><option>TITANIUM</option><option>אחר</option></select></label>' +
       '<label for="nAgent">סוכן<select id="nAgent"><option value="">ללא סוכן</option>' + names.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('') + '</select></label>' +
       '<label for="nStore">חנות<input id="nStore" autocomplete="off"></label>' +
