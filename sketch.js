@@ -1,4 +1,5 @@
-// Drawing screen: top view of one jacuzzi with walls, jets (2" or 3"), faucet, hand shower and service opening.
+// Drawing screen: top view of one jacuzzi with walls, jets (2" or 3"), light, faucet, hand shower and service opening;
+// air regulators and control buttons can be placed too when the customer asks for a position.
 // Sketch.open(host, { model, system, data, readOnly, customer, title, onSave(data) -> Promise, onClose() })
 // All positions are in centimetres from the tub's top-left corner (back wall, left end).
 window.Sketch = (function () {
@@ -11,7 +12,11 @@ window.Sketch = (function () {
     faucet:  { name: 'ברז', r: 3.4 },
     shower:  { name: 'מזלף יד', r: 2.4 },
     motor:   { name: 'מנוע', r: 9 },
-    service: { name: 'פתח שירות', r: 6, len: 40 }
+    service: { name: 'פתח שירות', r: 6, len: 40 },
+    // optional placed accessories: the light (when the jacuzzi has one), and regulators / buttons only when the customer wants them positioned
+    light:   { name: 'פנס תאורה', r: 2.6, tag: 'פנס' },
+    reg:     { name: 'וסת אוויר', r: 1.9, tag: 'וסת', max: 2 },
+    btn:     { name: 'כפתור הפעלה', r: 2.1, tag: 'כפתור', max: 2 }
   };
   var ORDER = ['jet', 'suction', 'ctrl', 'air', 'motor', 'service', 'faucet', 'shower'];
   var SIDES = { top: 'אחורי', bottom: 'קדמי', left: 'שמאלי', right: 'ימני' };
@@ -68,6 +73,7 @@ window.Sketch = (function () {
     function drawn(i) { return i.type !== 'suction' && i.type !== 'motor' && i.type !== 'ctrl' && i.type !== 'air'; }
     S.items = S.items.filter(drawn); S.removed = S.removed.filter(drawn);
     S.items.concat(S.removed).forEach(function (i) { var n = +String(i.id).slice(1); if (n > uid) uid = n; });
+    var needLight = S.light === true && !S.items.some(function (i) { return i.type === 'light'; }); // drawings saved when the light was only a yes/no choice
 
     host.innerHTML =
       '<div class="wrap">' +
@@ -112,6 +118,10 @@ window.Sketch = (function () {
       var body = f ? '#f6f6f3' : '#3a3d42', ring = f ? '#8d949b' : '#9a9da3', core = f ? '#c9cdd1' : '#17191c';
       if (t === 'jet') { var jr = jsize(it) === 2 ? 2.0 : 3.0; return '<circle r="' + jr + '" fill="' + body + '" stroke="' + ring + '" stroke-width=".7"/><circle r="' + (jr * 0.4) + '" fill="' + core + '"/>'; }
       if (t === 'suction') return '<circle r="2.9" fill="#b9bdc2" stroke="#70767d" stroke-width=".6"/><path d="M-1.8 -1h3.6M-2.2 0h4.4M-1.8 1h3.6" stroke="#4d5359" stroke-width=".45" fill="none"/>';
+      var tag = small || !TYPES[t].tag ? '' : '<text class="t-lbl" style="font-size:3.2px" text-anchor="middle" y="5.6" fill="var(--ink, #222)">' + TYPES[t].tag + '</text>';
+      if (t === 'light') return '<circle r="2.6" fill="#fff6cf" stroke="#b8860b" stroke-width=".6"/><circle r="1.1" fill="#f2b705"/><path d="M0 -2.1V-1.5M0 2.1V1.5M-2.1 0H-1.5M2.1 0H1.5" stroke="#b8860b" stroke-width=".4"/>' + tag;
+      if (t === 'btn') return '<circle r="2.1" fill="#c9c5c2" stroke="#7d7672" stroke-width=".5"/><circle r=".8" fill="#7d7672"/>' + tag;
+      if (t === 'reg') return '<circle r="1.9" fill="#d4d0cd" stroke="#7d7672" stroke-width=".5"/><path d="M0 -1.2V1.2" stroke="#7d7672" stroke-width=".5"/>' + tag;
       if (t === 'ctrl') return '<circle r="2.1" fill="#c9c5c2" stroke="#7d7672" stroke-width=".5"/><circle r=".8" fill="#7d7672"/>';
       if (t === 'air') return '<circle r="1.9" fill="#d4d0cd" stroke="#7d7672" stroke-width=".5"/><path d="M0 -1.2V1.2" stroke="#7d7672" stroke-width=".5"/>';
       if (t === 'faucet') return '<rect x="-3.4" y="-2" width="6.8" height="4" rx="1.2" fill="#c7ccd1" stroke="#5f666d" stroke-width=".5"/><rect x="-.9" y="0" width="1.8" height="5" rx=".9" fill="#aeb4ba" stroke="#5f666d" stroke-width=".5"/>';
@@ -185,8 +195,8 @@ window.Sketch = (function () {
       });
       S.items.slice().sort(function (a, b) { return (b.type === 'motor') - (a.type === 'motor') || (b.type === 'service') - (a.type === 'service'); })
         .forEach(function (it) {
-          if (opt.customer) { // no change marks, no jet sizes, and only jets and the service opening
-            if (it.type === 'jet' || it.type === 'service') o += '<g transform="' + tf(it) + '">' + symbol(it.type === 'jet' ? { type: 'jet', size: 3 } : it) + '</g>';
+          if (opt.customer) { // no change marks, no jet sizes; jets, the service opening, and the light / regulators / buttons when they were placed
+            if (it.type === 'jet' || it.type === 'service' || TYPES[it.type].tag) o += '<g transform="' + tf(it) + '">' + symbol(it.type === 'jet' ? { type: 'jet', size: 3 } : it) + '</g>';
             return;
           }
           o += '<g class="it" data-id="' + it.id + '" transform="' + tf(it) + '">' + hit(it) + ringFor(it) + symbol(it) + '</g>';
@@ -260,10 +270,10 @@ window.Sketch = (function () {
       $('skPalWrap').hidden = readOnly;
       var nj = S.items.filter(function (i) { return i.type === 'jet'; }).length;
       $('skPalWrap').querySelector('h2').textContent = 'הוספת פריט' + (jetsStd ? " · ג'טים: " + nj + ' מתוך ' + jetsStd : " · ג'טים: " + nj);
-      $('skPal').innerHTML = [['jet', 2], ['jet', 3], ['faucet'], ['shower'], ['service']].map(function (p) {
-        var t = p[0], demo = { type: t, size: p[1] };
+      $('skPal').innerHTML = [['jet', 2], ['jet', 3], ['light'], ['faucet'], ['shower'], ['service'], ['reg'], ['btn']].map(function (p) {
+        var t = p[0], demo = { type: t, size: p[1] }, have = S.items.filter(function (i) { return i.type === t; }).length, full = have >= (t === 'light' ? 1 : TYPES[t].max || 99);
         var vb = t === 'service' ? '-22 -8 44 16' : t === 'motor' ? '-13 -10 26 20' : '-5 -5 10 10';
-        return '<button class="btn" type="button" data-add="' + t + '"' + (p[1] ? ' data-size="' + p[1] + '"' : '') + (t === 'motor' && hasMotor ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol(demo, true) + '</svg><span>' + nameOf(demo) + '</span></button>'; }).join('');
+        return '<button class="btn" type="button" data-add="' + t + '"' + (p[1] ? ' data-size="' + p[1] + '"' : '') + (full ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol(demo, true) + '</svg><span>' + nameOf(demo) + '</span></button>'; }).join('');
       $('skHint').textContent = readOnly ? (opt.readOnlyNote || 'תצוגה בלבד.') : 'גוררים פריט כדי להזיז. לוחצים על צד של האמבטיה כדי להוסיף או להסיר קיר. במקלדת: Delete מוחק את הפריט המסומן, והחצים מזיזים אותו.';
       var note = $('skNote'); note.hidden = !!(tpl && tpl[system]) || readOnly;
       note.textContent = "לדגם הזה עדיין אין תבנית ג'טים סטנדרטית, אז מסמנים את הג'טים ידנית. מיקום פתח השירות הוא נקודת התחלה בלבד.";
@@ -312,7 +322,8 @@ window.Sketch = (function () {
         if (idx > -1) { var it = S.removed.splice(idx, 1)[0]; it.x = it.std.x; it.y = it.std.y; if (it.std.side) it.side = it.std.side; S.items.push(it); selId = it.id; touch(); } return; }
       if (!(ev.target.closest && ev.target.closest('.it'))) { selId = null; renderAll(); }
     });
-    function removeItem(it) { S.items = S.items.filter(function (i) { return i.id !== it.id; }); if (it.std) S.removed.push(it); selId = null; }
+    function removeItem(it) { S.items = S.items.filter(function (i) { return i.id !== it.id; }); if (it.std) S.removed.push(it); selId = null; if (it.type === 'light') S.light = false; }
+    function addLight() { var it = { id: 'a' + (++uid), type: 'light', x: 0, y: 0, std: null }; place(it, W / 2, H * 0.3); S.items.push(it); return it; }
     // keyboard: Delete or Backspace removes the selected item, arrows move it 1 cm (not while typing in a field)
     function onKey(ev) {
       if (readOnly || host.hidden || !host.contains(svg)) return;
@@ -335,10 +346,13 @@ window.Sketch = (function () {
       var b = ev.target.closest('button[data-add]'); if (!b || b.disabled || readOnly) return;
       var t = b.dataset.add, n = S.items.filter(function (i) { return i.type === t && !i.std; }).length, it = { id: 'a' + (++uid), type: t, x: 0, y: 0, std: null };
       if (t === 'jet') it.size = b.dataset.size === '2' ? 2 : 3;
+      if (t === 'light') S.light = true;
       if (t === 'faucet') place(it, W * 0.74 - n * 9, 3.6);
       else if (t === 'shower') place(it, W * 0.83 - n * 9, 3.6);
       else if (t === 'service') { var o = ['bottom', 'left', 'right', 'top'].filter(function (k) { return !S.walls[k]; })[0] || 'bottom', at = { bottom: [W / 2, H], top: [W / 2, 0], left: [0, H / 2], right: [W, H / 2] }[o]; place(it, at[0], at[1]); }
       else if (t === 'motor') place(it, 22, H - 22);
+      else if (t === 'light') place(it, W / 2, H * 0.3);
+      else if (t === 'reg' || t === 'btn') place(it, W * (t === 'reg' ? 0.14 : 0.36) + n * 13, 3.6);
       else place(it, W * 0.4 + (n % 6) * 8, H / 2);
       S.items.push(it); selId = it.id; touch();
     });
@@ -353,7 +367,10 @@ window.Sketch = (function () {
     });
     $('skIssues').addEventListener('click', function (ev) { if (readOnly || !ev.target.closest('[data-jetok]')) return; S.jetOk = S.items.filter(function (i) { return i.type === 'jet'; }).length; touch(); });
     $('skHeater').addEventListener('change', function () { if (readOnly) return; S.heater = this.value; touch(); });
-    $('skLight').addEventListener('change', function () { if (readOnly) return; S.light = this.value === '1' ? true : this.value === '0' ? false : null; touch(); });
+    $('skLight').addEventListener('change', function () { if (readOnly) return; S.light = this.value === '1' ? true : this.value === '0' ? false : null;
+      var has = S.items.some(function (i) { return i.type === 'light'; });
+      if (S.light === true && !has) selId = addLight().id; else if (S.light !== true && has) { S.items = S.items.filter(function (i) { return i.type !== 'light'; }); selId = null; }
+      touch(); });
     $('skMotor').addEventListener('change', function () { if (readOnly) return; S.motor = this.value || null; touch(); });
     $('skFinish').addEventListener('click', function (ev) { var b = ev.target.closest('button[data-finish]'); if (!b || b.disabled) return; S.finish = b.dataset.finish; touch(); });
     $('skReset').addEventListener('click', function () { if (readOnly) return; if (arm('reset')) { var notes = S.notes; uid = 0; S = fresh(); S.notes = notes; selId = null; touch(); } });
@@ -370,6 +387,7 @@ window.Sketch = (function () {
     });
     $('skClose').addEventListener('click', function () { if (dirty && !readOnly && !arm('close')) return; document.removeEventListener('keydown', onKey); host.hidden = true; host.innerHTML = ''; if (opt.onClose) opt.onClose(); });
     host.hidden = false; host.scrollTop = 0;
+    if (needLight && !readOnly) addLight();
     renderAll();
   }
   // True when a saved drawing has a problem that must be fixed before the customer can approve it.
