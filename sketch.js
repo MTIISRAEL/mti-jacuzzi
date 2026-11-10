@@ -37,7 +37,7 @@ window.Sketch = (function () {
 
     function template() {
       var items = [];
-      function add(type, x, y, side) { var it = { id: 's' + (++uid), type: type, x: x, y: y, std: { x: x, y: y } }; if (side) { it.side = side; it.std.side = side; } items.push(it); }
+      function add(type, x, y, side) { var it = { id: 's' + (++uid), type: type, x: x, y: y, std: { x: x, y: y } }; if (type === 'jet') { it.size = 3; it.std.size = 3; } if (side) { it.side = side; it.std.side = side; } items.push(it); }
       ((tpl && tpl[system]) || []).forEach(function (p) { add('jet', p[0], p[1]); });
       if (model.sides) { // right-handed layout: the square corner is top right, the motor sits under that end
         add('motor', W - 16, H - 14);
@@ -82,8 +82,12 @@ window.Sketch = (function () {
       $('skKit').closest('.panel').hidden = true; $('skNotes').closest('.panel').hidden = true;
     }
 
+    // Jets come in two sizes, 2" and 3". Drawings saved before sizes existed count as 3".
+    function jsize(it) { return it.size === 2 ? 2 : 3; }
+    function nameOf(it) { return it.type === 'jet' ? "ג'ט " + jsize(it) + '"' : TYPES[it.type].name; }
     function status(it) {
       if (!it.std) return 'added';
+      if (it.type === 'jet' && it.std.size && jsize(it) !== it.std.size) return 'moved';
       if (dist(it, it.std) > 1.5 || (it.type === 'service' && it.side !== it.std.side)) return 'moved';
       return '';
     }
@@ -91,7 +95,7 @@ window.Sketch = (function () {
     function symbol(it, small) {
       var t = it.type, f = S.finish === 'white';
       var body = f ? '#f6f6f3' : '#3a3d42', ring = f ? '#8d949b' : '#9a9da3', core = f ? '#c9cdd1' : '#17191c';
-      if (t === 'jet') return '<circle r="2.7" fill="' + body + '" stroke="' + ring + '" stroke-width=".7"/><circle r="1.1" fill="' + core + '"/>';
+      if (t === 'jet') { var jr = jsize(it) === 2 ? 2.0 : 3.0; return '<circle r="' + jr + '" fill="' + body + '" stroke="' + ring + '" stroke-width=".7"/><circle r="' + (jr * 0.4) + '" fill="' + core + '"/>'; }
       if (t === 'suction') return '<circle r="2.9" fill="#b9bdc2" stroke="#70767d" stroke-width=".6"/><path d="M-1.8 -1h3.6M-2.2 0h4.4M-1.8 1h3.6" stroke="#4d5359" stroke-width=".45" fill="none"/>';
       if (t === 'ctrl') return '<circle r="2.1" fill="#c9c5c2" stroke="#7d7672" stroke-width=".5"/><circle r=".8" fill="#7d7672"/>';
       if (t === 'air') return '<circle r="1.9" fill="#d4d0cd" stroke="#7d7672" stroke-width=".5"/><path d="M0 -1.2V1.2" stroke="#7d7672" stroke-width=".5"/>';
@@ -178,9 +182,10 @@ window.Sketch = (function () {
       if (!it) { box.hidden = true; box.innerHTML = ''; return; }
       var st = status(it), stTxt = st === 'added' ? ' · נוסף' : st === 'moved' ? ' · הוזז ' + r1(dist(it, it.std)) + ' ' + CM + ' מהסטנדרט' : ' · במקום הסטנדרטי';
       box.hidden = false;
-      box.innerHTML = '<div><strong>' + TYPES[it.type].name + '</strong>' + stTxt + '<div class="where">' + where(it) + '</div></div>' + (readOnly ? '' :
+      box.innerHTML = '<div><strong>' + nameOf(it) + '</strong>' + stTxt + '<div class="where">' + where(it) + '</div></div>' + (readOnly ? '' :
         '<div class="row"><div class="nudge" aria-label="הזזה עדינה"><button class="btn" type="button" data-n="-1,0" aria-label="שמאלה">←</button><button class="btn" type="button" data-n="0,-1" aria-label="למעלה">↑</button>' +
         '<button class="btn" type="button" data-n="0,1" aria-label="למטה">↓</button><button class="btn" type="button" data-n="1,0" aria-label="ימינה">→</button></div>' +
+        (it.type === 'jet' ? '<button class="btn" type="button" data-act="size">החלף ל-' + (jsize(it) === 2 ? 3 : 2) + '"</button>' : '') +
         (st === 'moved' ? '<button class="btn" type="button" data-act="back">החזר למקום</button>' : '') + '<button class="btn danger" type="button" data-act="del">הסר</button></div>');
     }
     function counts(items) { var c = {}; items.forEach(function (i) { c[i.type] = (c[i.type] || 0) + 1; }); return c; }
@@ -211,15 +216,22 @@ window.Sketch = (function () {
       li.push('<li><span class="dot wall"></span><span>קירות: ' + (walls.length ? walls.join(', ') : 'אין (אמבטיה חופשית)') + '</span></li>');
       S.items.forEach(function (it) {
         var st = status(it);
-        if (st === 'moved') li.push('<li><span class="dot moved"></span><span>' + TYPES[it.type].name + ' הוזז ' + r1(dist(it, it.std)) + ' ' + CM + ' · עכשיו ' + where(it) + '</span></li>');
-        if (st === 'added') li.push('<li><span class="dot added"></span><span>' + (it.type === 'jet' && !(tpl && tpl[system]) ? '' : 'נוסף ') + TYPES[it.type].name + ' · ' + where(it) + '</span></li>');
+        if (st === 'moved') li.push('<li><span class="dot moved"></span><span>' + nameOf(it) + (dist(it, it.std) > 1.5 || it.type === 'service' ? ' הוזז ' + r1(dist(it, it.std)) + ' ' + CM : ' במקום ' + it.std.size + '"') + ' · עכשיו ' + where(it) + '</span></li>');
+        if (st === 'added') li.push('<li><span class="dot added"></span><span>' + (it.type === 'jet' && !(tpl && tpl[system]) ? '' : 'נוסף ') + nameOf(it) + ' · ' + where(it) + '</span></li>');
       });
-      S.removed.forEach(function (it) { li.push('<li><span class="dot removed"></span><span>הוסר ' + TYPES[it.type].name + ' סטנדרטי</span></li>'); });
+      S.removed.forEach(function (it) { li.push('<li><span class="dot removed"></span><span>הוסר ' + nameOf(it) + ' סטנדרטי</span></li>'); });
       if (S.finish === 'white') li.push('<li><span class="dot added"></span><span>' + "גימור ג'טים לבן (שדרוג)" + '</span></li>');
       if (li.length === (model.sides ? 2 : 1)) li.push('<li class="empty">אין שינויים מהתבנית הסטנדרטית.</li>');
       $('skChanges').innerHTML = li.join('');
-      var c = counts(S.items), std = counts(template()), rows = '';
+      function counts2(items) { var c = {}; items.forEach(function (i) { var k = i.type === 'jet' ? 'jet' + jsize(i) : i.type; c[k] = (c[k] || 0) + 1; }); return c; }
+      var c = counts2(S.items), std = counts2(template()), rows = '', fin = S.finish === 'white' ? 'לבן' : 'אפור';
+      [2, 3].forEach(function (z) {
+        var n = c['jet' + z] || 0, s0 = std['jet' + z] || 0; if (!n && !s0) return;
+        var d = n - s0, diff = d && tpl && tpl[system] ? '<span class="diff">' + (d > 0 ? '+' + d : d) + ' מהסטנדרט</span>' : '';
+        rows += '<tr><td>' + "ג'ט " + z + '" ' + fin + diff + '</td><td class="n">' + n + '</td></tr>';
+      });
       ORDER.forEach(function (t) {
+        if (t === 'jet') return;
         var n = c[t] || 0, s = std[t] || 0; if (!n && !s) return;
         var d = n - s, diff = d && (t !== 'jet' || (tpl && tpl[system])) ? '<span class="diff">' + (d > 0 ? '+' + d : d) + ' מהסטנדרט</span>' : '';
         rows += '<tr><td>' + TYPES[t].name + (t === 'jet' ? ' ' + (S.finish === 'white' ? 'לבן' : 'אפור') : '') + diff + '</td><td class="n">' + n + '</td></tr>';
@@ -236,9 +248,10 @@ window.Sketch = (function () {
         return '<button class="btn' + (S.finish === f[0] ? ' primary' : '') + '" type="button" data-finish="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('');
       var hasMotor = S.items.some(function (i) { return i.type === 'motor'; });
       $('skPalWrap').hidden = readOnly;
-      $('skPal').innerHTML = ['jet', 'faucet', 'shower', 'service', 'motor'].map(function (t) {
+      $('skPal').innerHTML = [['jet', 2], ['jet', 3], ['faucet'], ['shower'], ['service'], ['motor']].map(function (p) {
+        var t = p[0], demo = { type: t, size: p[1] };
         var vb = t === 'service' ? '-22 -8 44 16' : t === 'motor' ? '-13 -10 26 20' : '-5 -5 10 10';
-        return '<button class="btn" type="button" data-add="' + t + '"' + (t === 'motor' && hasMotor ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol({ type: t }, true) + '</svg><span>' + TYPES[t].name + '</span></button>'; }).join('');
+        return '<button class="btn" type="button" data-add="' + t + '"' + (p[1] ? ' data-size="' + p[1] + '"' : '') + (t === 'motor' && hasMotor ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol(demo, true) + '</svg><span>' + nameOf(demo) + '</span></button>'; }).join('');
       $('skHint').textContent = readOnly ? (opt.readOnlyNote || 'תצוגה בלבד.') : 'גוררים פריט כדי להזיז. לוחצים על צד של האמבטיה כדי להוסיף או להסיר קיר.';
       var note = $('skNote'); note.hidden = !!(tpl && tpl[system]) || readOnly;
       note.textContent = "לדגם הזה עדיין אין תבנית ג'טים סטנדרטית, אז מסמנים את הג'טים ידנית. מיקום המנוע ופתח השירות הוא נקודת התחלה בלבד.";
@@ -289,13 +302,15 @@ window.Sketch = (function () {
     $('skSel').addEventListener('click', function (ev) {
       var b = ev.target.closest('button'), it = find(selId); if (!b || !it || readOnly) return;
       if (b.dataset.n) { var d = b.dataset.n.split(','); place(it, it.x + (+d[0]), it.y + (+d[1])); }
-      else if (b.dataset.act === 'back') { it.x = it.std.x; it.y = it.std.y; if (it.std.side) it.side = it.std.side; }
+      else if (b.dataset.act === 'size') { it.size = jsize(it) === 2 ? 3 : 2; }
+      else if (b.dataset.act === 'back') { it.x = it.std.x; it.y = it.std.y; if (it.std.side) it.side = it.std.side; if (it.std.size) it.size = it.std.size; }
       else if (b.dataset.act === 'del') { S.items = S.items.filter(function (i) { return i.id !== it.id; }); if (it.std) S.removed.push(it); selId = null; }
       touch();
     });
     $('skPal').addEventListener('click', function (ev) {
       var b = ev.target.closest('button[data-add]'); if (!b || b.disabled || readOnly) return;
       var t = b.dataset.add, n = S.items.filter(function (i) { return i.type === t && !i.std; }).length, it = { id: 'a' + (++uid), type: t, x: 0, y: 0, std: null };
+      if (t === 'jet') it.size = b.dataset.size === '2' ? 2 : 3;
       if (t === 'faucet') place(it, W * 0.74 - n * 9, 3.6);
       else if (t === 'shower') place(it, W * 0.83 - n * 9, 3.6);
       else if (t === 'service') { var o = ['bottom', 'left', 'right', 'top'].filter(function (k) { return !S.walls[k]; })[0] || 'bottom', at = { bottom: [W / 2, H], top: [W / 2, 0], left: [0, H / 2], right: [W, H / 2] }[o]; place(it, at[0], at[1]); }
