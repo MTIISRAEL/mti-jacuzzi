@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261110-081252';
+  var APP_VERSION = '20261110-081929';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -273,7 +273,6 @@
         if (canAct(f.s)) {
           var blockTxt = '';
           if (f.s.k === 'kitOrder' && !kitDraft(o).length) blockTxt = 'הרשימה ריקה. מוסיפים לפחות פריט אחד.';
-          if (f.s.k === 'kit' && o.kitList && o.kitList.some(function (x) { return !x.done; })) blockTxt = 'מסמנים קודם את כל הפריטים ברשימה.';
           if (f.s.k === 'approval' && MODEL[o.model]) { if (!o.sketch) blockTxt = 'אי אפשר לאשר לפני שיש שרטוט.'; else if (o.sketchBlocking) blockTxt = 'בשרטוט יש בעיה מסומנת באדום. צריך לתקן לפני אישור.'; }
           h += '<button class="btn primary big" type="button" data-next="' + id + '"' + (busy || (blockTxt ? ' disabled' : '')) + '>' + f.s.done + (f.s.k === 'pack' && o.panel ? ' (כולל פאנל)' : '') + '</button>';
           if (blockTxt) h += '<div class="who">' + blockTxt + '</div>';
@@ -368,15 +367,27 @@
       var lines = kitDraft(o);
       h += '<div class="kitbox"><strong>הזמנת קיט למחסנאי</strong>' + (o.sketch ? '' : '<div class="st">אין שרטוט שמור, אז הרשימה לא נגזרת אוטומטית. מוסיפים פריטים ידנית.</div>') +
         '<ul class="kitlist">' + lines.map(function (x) { return '<li><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + skuHtml(x) + '</span>' + (x.extra != null ? '<button class="btn small danger" type="button" data-kitdel="' + id + '" data-i="' + x.extra + '">הסר</button>' : '') + '</li>'; }).join('') + '</ul>' +
-        '<div class="row"><input id="kn-' + id + '" placeholder="פריט נוסף" aria-label="פריט נוסף" autocomplete="off"><input id="ks-' + id + '" class="skuin" inputmode="numeric" placeholder="מק&quot;ט" aria-label="מק&quot;ט" autocomplete="off"><input id="kq-' + id + '" class="qty" inputmode="numeric" value="1" aria-label="כמות"><button class="btn small" type="button" data-kitadd="' + id + '">הוספה</button></div></div>';
+        '<div class="row"><input id="kn-' + id + '" placeholder="פריט נוסף" aria-label="פריט נוסף" autocomplete="off"><input id="ks-' + id + '" class="skuin" inputmode="numeric" placeholder="מק&quot;ט" aria-label="מק&quot;ט" autocomplete="off"><input id="kq-' + id + '" class="qty" inputmode="numeric" value="1" aria-label="כמות"><button class="btn small" type="button" data-kitadd="' + id + '">הוספה</button></div>' + '<div class="row"><button class="btn" type="button" data-kitprint="' + id + '">הורדת PDF / הדפסה</button></div>' + '</div>';
     } else if (o.kitList && o.kitList.length && IDX[k] >= IDX.kit && IDX[k] <= IDX.fitting) {
-      var can = k === 'kit' && canAct(f.s), left = o.kitList.filter(function (x) { return !x.done; }).length;
-      h += '<div class="kitbox"><strong>' + (k === 'kit' ? 'רשימת הקיט להכנה' : 'הקיט שנשלח') + '</strong>' + (k === 'kit' ? '<div class="st">' + (left ? 'מסמנים כל פריט שנכנס לקיט. נשארו ' + left + '.' : 'כל הפריטים בקיט.') + '</div>' : '') +
-        '<ul class="kitlist">' + o.kitList.map(function (x, i) {
-          var row = '<span class="chk">' + (x.done ? '✓' : '') + '</span><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + skuHtml(x) + '</span>';
-          return '<li class="' + (x.done ? 'done' : '') + '">' + (can ? '<button type="button" class="kitrow" data-kittick="' + id + '" data-i="' + i + '" aria-pressed="' + !!x.done + '">' + row + '</button>' : row) + '</li>'; }).join('') + '</ul></div>';
+      h += '<div class="kitbox"><strong>' + (k === 'kit' ? 'רשימת הקיט להכנה' : 'הקיט שנשלח') + '</strong>' +
+        '<ul class="kitlist">' + o.kitList.map(function (x) { return '<li><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + skuHtml(x) + '</span></li>'; }).join('') + '</ul>' +
+        '<div class="row"><button class="btn" type="button" data-kitprint="' + id + '">הורדת PDF / הדפסה</button></div></div>';
     }
     return h;
+  }
+  // A4 sheet of one order's kit, sent to the browser's print dialog (where it can also be saved as PDF)
+  function printKit(o) {
+    var lines = o.stage === 'kitOrder' || !(o.kitList && o.kitList.length) ? kitDraft(o) : o.kitList, sk = o.sketch || {};
+    var facts = [['חנות', o.store], ['לקוח', o.customer], ['הזמנה באינטגרל', o.num], ['מספר סידורי', o.tubNum], ['דגם', mname(o.model)], ['מערכת', o.system], ['כיוון', sk.side === 'R' ? 'ימין' : sk.side === 'L' ? 'שמאל' : ''], ['פנס', sk.light === true ? 'יש' : sk.light === false ? 'אין' : ''], ['פאנל', o.panel ? 'כן (מורכב באשדוד)' : 'לא'], ['סוכן', o.agent]].filter(function (f) { return f[1]; });
+    var d = new Date(), date = d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
+    $('printArea').innerHTML = '<div class="p-head"><div><div class="p-brand">MTI</div><h1>הזמנת קיט לג\'קוזי</h1></div><div class="p-date">' + date + '</div></div>' +
+      '<div class="p-facts">' + facts.map(function (f) { return '<div><span>' + esc(f[0]) + '</span><b>' + esc(f[1]) + '</b></div>'; }).join('') + '</div>' +
+      '<table class="p-kit"><thead><tr><th class="c">#</th><th>מק"ט</th><th>פריט</th><th class="c">כמות</th></tr></thead><tbody>' +
+      lines.map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="p-sku">' + esc(x.sku || '') + '</td><td>' + esc(x.n) + '</td><td class="c q">' + esc(x.q) + '</td></tr>'; }).join('') + '</tbody></table>' +
+      (o.notes ? '<p class="p-notes"><b>הערות להזמנה:</b> ' + esc(o.notes) + '</p>' : '') + (sk.notes ? '<p class="p-notes"><b>הערות למאבזר:</b> ' + esc(sk.notes) + '</p>' : '') +
+      '<div class="p-sign"><div>הוכן על ידי: ____________________</div><div>תאריך: ______________</div><div>חתימה: ______________</div></div>';
+    var t = document.title; document.title = 'קיט ' + (o.tubNum || '') + ' ' + titleOf(o);
+    window.print(); document.title = t;
   }
   // The customer approved through the link: move the order on, once, whichever office screen sees it first.
   function autoApprove(orderId, token, a) {
@@ -427,7 +438,7 @@
       return move(o, nx.k, null, o.stage === 'kitOrder' ? { kitList: kitDraft(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; }) } : null); }); }
     else if (d.kitadd && (o = find(d.kitadd))) { var kn = $('kn-' + o.id).value.trim().slice(0, 80), kq = parseInt($('kq-' + o.id).value, 10) || 1, ks = $('ks-' + o.id).value.trim().slice(0, 20); if (!kn) return; document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ kitExtra: (o.kitExtra || []).concat([{ n: kn, q: kq, sku: ks }]) }); }); }
     else if (d.kitdel && (o = find(d.kitdel))) { var ke = (o.kitExtra || []).slice(); ke.splice(+d.i, 1); write(o.id, function () { return col.doc(o.id).update({ kitExtra: ke }); }); }
-    else if (d.kittick && (o = find(d.kittick))) { var kl = (o.kitList || []).map(function (x, i) { return i === +d.i ? { n: x.n, q: x.q, sku: x.sku || '', done: !x.done } : x; }); write(o.id, function () { return col.doc(o.id).update({ kitList: kl }); }); }
+    else if (d.kitprint && (o = find(d.kitprint))) printKit(o);
     else if (d.fail && (o = find(d.fail))) { if (arm('fail' + o.id)) write(o.id, function () { return move(o, 'toBarkan', 'הבדיקה נכשלה, חוזר לברקן'); }); }
     else if (d.holdopen) { st.holdFor = d.holdopen; render(); }
     else if (d.hold && (o = find(d.hold))) {
