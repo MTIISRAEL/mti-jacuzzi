@@ -16,7 +16,22 @@ window.Sketch = (function () {
     // optional placed accessories: the light (when the jacuzzi has one), and regulators / buttons only when the customer wants them positioned
     light:   { name: 'פנס תאורה', r: 2.6, tag: 'פנס' },
     reg:     { name: 'וסת אוויר', r: 1.9, tag: 'וסת', max: 2 },
-    btn:     { name: 'כפתור הפעלה', r: 2.1, tag: 'כפתור', max: 2 }
+    btn:     { name: 'כפתור הפעלה', r: 2.1, tag: 'כפתור', max: 2 },
+    // spa parts (sizes in cm, colours as in the older spa system); w/h make a panel rectangle instead of a circle
+    s_j2:    { name: 'ג\'ט 2"', r: 2.5, c: '#facc15', spa: 1 },
+    s_j3:    { name: 'ג\'ט 3"', r: 3.8, c: '#84cc16', spa: 1 },
+    s_j4:    { name: 'ג\'ט 4"', r: 5.1, c: '#ec4899', spa: 1 },
+    s_j5:    { name: 'ג\'ט 5"', r: 6.4, c: '#1e3a8a', spa: 1 },
+    s_suc15: { name: 'יניקה 1.5"', r: 4.3, c: '#b91c1c', spa: 1 },
+    s_suc2:  { name: 'יניקה 2"', r: 6.3, c: '#881337', spa: 1 },
+    s_drain: { name: 'ניקוז', r: 3.5, c: '#6b21a8', spa: 1 },
+    s_led:   { name: 'פנס 5"', r: 6.4, c: '#eab308', spa: 1 },
+    s_mini:  { name: 'מיני לד', r: 1.6, c: '#15803d', spa: 1 },
+    s_air:   { name: 'וסת אוויר', r: 3.8, c: '#94a3b8', spa: 1 },
+    s_skim:  { name: 'סקימר', r: 8, c: '#0f172a', spa: 1 },
+    s_tp500: { name: 'פאנל TP500', r: 8.3, w: 16.5, h: 5.7, c: '#f97316', spa: 1 },
+    s_tp700: { name: 'פאנל TP700', r: 12.7, w: 25.4, h: 8.9, c: '#0369a1', spa: 1 },
+    s_st4:   { name: 'פאנל Spa Touch 4', r: 7.3, w: 14.6, h: 10.2, c: '#0f172a', spa: 1 }
   };
   var ORDER = ['jet', 'suction', 'ctrl', 'air', 'motor', 'service', 'faucet', 'shower'];
   var SIDES = { top: 'אחורי', bottom: 'קדמי', left: 'שמאלי', right: 'ימני' };
@@ -51,7 +66,7 @@ window.Sketch = (function () {
   function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
   function open(host, opt) {
-    var model = opt.model, W = model.w, H = model.h, system = opt.system || '';
+    var model = opt.model, W = model.w, H = model.h, system = opt.system || '', SPA = opt.kind === 'spa';
     var tpl = TEMPLATES[model.code] || null, readOnly = !!opt.readOnly;
     // how many jets the catalog gives this model in this system (undefined when unknown, e.g. system 'other')
     var jetsStd = system === 'BASIC' ? model.jb : system === 'TITANIUM' ? model.jt : null;
@@ -68,7 +83,7 @@ window.Sketch = (function () {
       }
       return items;
     }
-    function fresh() { return { finish: 'grey', side: null, heater: 'H15-R2', items: template(), removed: [], walls: { top: true, right: true, bottom: false, left: false }, notes: '' }; }
+    function fresh() { if (SPA) return { items: [], removed: [], walls: {}, notes: '' }; return { finish: 'grey', side: null, heater: 'H15-R2', items: template(), removed: [], walls: { top: true, right: true, bottom: false, left: false }, notes: '' }; }
     var S = opt.data ? JSON.parse(JSON.stringify(opt.data)) : fresh();
     S.items = S.items || []; S.removed = S.removed || []; S.walls = S.walls || {}; if (!S.heater) S.heater = 'H15-R2';
     // suction, motor, control button and air regulators are not drawn (they are fixed kit parts); drop them from drawings saved before that change
@@ -100,6 +115,10 @@ window.Sketch = (function () {
       '</div>';
     function $(id) { return host.querySelector('#' + id); }
     var svg = $('skSvg');
+    if (SPA) { // the spa drawing is internal: no motor / heater / light choice, no jet finish, no customer kit
+      $('skMotorRow').hidden = true; $('skFinish').hidden = true; $('skIssues').hidden = true;
+      $('skKit').closest('.panel').querySelector('h2').textContent = 'פריטים בשרטוט';
+    }
     if (opt.customer) { // the customer sees only the drawing: walls, service opening and jet layout
       $('skChanges').closest('.panel').hidden = true; host.querySelector('.legend').hidden = true;
       host.querySelector('.head').hidden = true; $('skIssues').hidden = true; $('skFinish').hidden = true; $('skMotorRow').hidden = true;
@@ -122,6 +141,11 @@ window.Sketch = (function () {
       if (t === 'jet') { var jr = jsize(it) === 2 ? 2.0 : 3.0; return '<circle r="' + jr + '" fill="' + body + '" stroke="' + ring + '" stroke-width=".7"/><circle r="' + (jr * 0.4) + '" fill="' + core + '"/>'; }
       if (t === 'suction') return '<circle r="2.9" fill="#b9bdc2" stroke="#70767d" stroke-width=".6"/><path d="M-1.8 -1h3.6M-2.2 0h4.4M-1.8 1h3.6" stroke="#4d5359" stroke-width=".45" fill="none"/>';
       var tag = small || !TYPES[t].tag ? '' : '<text class="t-lbl" style="font-size:3.2px" text-anchor="middle" y="5.6" fill="var(--ink, #222)">' + TYPES[t].tag + '</text>';
+      var ST = TYPES[t];
+      if (ST && ST.spa) { // spa parts: a coloured disc, or a rounded rectangle for a control panel
+        if (ST.w) return '<rect x="' + (-ST.w / 2) + '" y="' + (-ST.h / 2) + '" width="' + ST.w + '" height="' + ST.h + '" rx="2" fill="' + ST.c + '" stroke="#fff" stroke-width=".5"/>' + (small ? '' : '<text class="t-lbl" style="font-size:2.6px" text-anchor="middle" y="0.9" fill="#fff">' + esc(ST.name.replace('פאנל ', '')) + '</text>');
+        return '<circle r="' + ST.r + '" fill="' + ST.c + '" stroke="#fff" stroke-width="' + (ST.r > 3 ? .6 : .35) + '"/><circle r="' + (ST.r * 0.35) + '" fill="rgba(255,255,255,.55)"/>';
+      }
       if (t === 'light') return '<circle r="2.6" fill="#fff6cf" stroke="#b8860b" stroke-width=".6"/><circle r="1.1" fill="#f2b705"/><path d="M0 -2.1V-1.5M0 2.1V1.5M-2.1 0H-1.5M2.1 0H1.5" stroke="#b8860b" stroke-width=".4"/>' + tag;
       if (t === 'btn') return '<circle r="2.1" fill="#c9c5c2" stroke="#7d7672" stroke-width=".5"/><circle r=".8" fill="#7d7672"/>' + tag;
       if (t === 'reg') return '<circle r="1.9" fill="#d4d0cd" stroke="#7d7672" stroke-width=".5"/><path d="M0 -1.2V1.2" stroke="#7d7672" stroke-width=".5"/>' + tag;
@@ -176,6 +200,7 @@ window.Sketch = (function () {
       return o;
     }
     function tubSvg() {
+      if (model.src) return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><image href="' + model.src + '" x="0" y="0" width="' + W + '" height="' + H + '" preserveAspectRatio="none"/>';
       if (model.img) return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><image href="img/' + (model.base || model.code) + (model.sides ? '-' + (S.side || 'R') : '') + '.jpg" x="0" y="0" width="' + W + '" height="' + H + '" preserveAspectRatio="none"/>';
       // no picture for this model yet: a plain outline at the model's size
       if (model.shape === 'corner') return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><path d="M0 0H' + W + 'V' + H + 'H' + (W * 0.72) + 'Q' + (W * 0.05) + ' ' + (H * 0.95) + ' 0 ' + (H * 0.28) + 'Z" fill="#f1efed" stroke="#cfcac6" stroke-width=".6"/>' +
@@ -231,6 +256,7 @@ window.Sketch = (function () {
       return Math.hypot(m.x - px, m.y - py);
     }
     function issues() {
+      if (SPA) return [];
       var out = [], svc = S.items.filter(function (i) { return i.type === 'service'; }), motors = S.items.filter(function (i) { return i.type === 'motor'; });
       if (model.sides && !S.side) out.push(['bad', 'לא נבחר כיוון האמבטיה: ימין או שמאל.']);
       if (!S.motor) out.push(['bad', 'לא נבחר סוג מנוע.']);
@@ -255,7 +281,7 @@ window.Sketch = (function () {
       if (model.sides) li.push('<li><span class="dot wall"></span><span>כיוון האמבטיה: ' + (S.side === 'R' ? 'ימין' : S.side === 'L' ? 'שמאל' : 'לא נבחר') + '</span></li>');
       li.push('<li><span class="dot wall"></span><span>קירות: ' + (walls.length ? walls.join(', ') : 'אין (אמבטיה חופשית)') + '</span></li>');
       $('skChanges').innerHTML = li.join('');
-      var rows = kitOf(S).map(function (x) { return '<tr><td>' + esc(x.n) + (x.sku ? ' <span class="sku">מק"ט ' + esc(x.sku) + '</span>' : '') + '</td><td class="n">' + x.q + '</td></tr>'; }).join('');
+      var rows = (SPA ? spaCounts(S) : kitOf(S)).map(function (x) { return '<tr><td>' + esc(x.n) + (x.sku ? ' <span class="sku">מק"ט ' + esc(x.sku) + '</span>' : '') + '</td><td class="n">' + x.q + '</td></tr>'; }).join('');
       $('skKit').innerHTML = rows;
       return list;
     }
@@ -274,19 +300,19 @@ window.Sketch = (function () {
       var hs = $('skHeater'); hs.innerHTML = Object.keys(HEATERS).map(function (k) { return '<option value="' + k + '">' + HEATERS[k].label + ' · מק"ט ' + HEATERS[k].sku + '</option>'; }).join(''); hs.value = HEATERS[S.heater] ? S.heater : 'H15-R2'; hs.disabled = readOnly;
       var ls = $('skLight'); ls.value = S.light === true ? '1' : S.light === false ? '0' : ''; ls.disabled = readOnly;
       $('skPalWrap').hidden = readOnly;
-      var nj = S.items.filter(function (i) { return i.type === 'jet'; }).length;
+      var nj = S.items.filter(function (i) { return i.type === 'jet' || /^s_j/.test(i.type); }).length;
       $('skPalWrap').querySelector('h2').textContent = 'הוספת פריט' + (jetsStd ? " · ג'טים: " + nj + ' מתוך ' + jetsStd : " · ג'טים: " + nj);
-      $('skPal').innerHTML = [['jet', 2], ['jet', 3], ['light'], ['faucet'], ['shower'], ['service'], ['reg'], ['btn']].map(function (p) {
+      $('skPal').innerHTML = (SPA ? Object.keys(TYPES).filter(function (k) { return TYPES[k].spa; }).map(function (k) { return [k]; }) : [['jet', 2], ['jet', 3], ['light'], ['faucet'], ['shower'], ['service'], ['reg'], ['btn']]).map(function (p) {
         var t = p[0], demo = { type: t, size: p[1] }, have = S.items.filter(function (i) { return i.type === t; }).length, full = have >= (t === 'light' ? 1 : TYPES[t].max || 99);
-        var vb = t === 'service' ? '-22 -8 44 16' : t === 'motor' ? '-13 -10 26 20' : '-5 -5 10 10';
+        var vb = t === 'service' ? '-22 -8 44 16' : t === 'motor' ? '-13 -10 26 20' : TYPES[t].spa ? (TYPES[t].w ? (-TYPES[t].w / 2 - 1) + ' ' + (-TYPES[t].w / 2 - 1) + ' ' + (TYPES[t].w + 2) + ' ' + (TYPES[t].w + 2) : (-TYPES[t].r - 1) + ' ' + (-TYPES[t].r - 1) + ' ' + (2 * TYPES[t].r + 2) + ' ' + (2 * TYPES[t].r + 2)) : '-5 -5 10 10';
         return '<button class="btn" type="button" data-add="' + t + '"' + (p[1] ? ' data-size="' + p[1] + '"' : '') + (full ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol(demo, true) + '</svg><span>' + nameOf(demo) + '</span></button>'; }).join('');
       $('skHint').textContent = readOnly ? (opt.readOnlyNote || 'תצוגה בלבד.') : 'גוררים פריט כדי להזיז. לוחצים על צד של האמבטיה כדי להוסיף או להסיר קיר. במקלדת: Delete מוחק את הפריט המסומן, והחצים מזיזים אותו.';
-      var note = $('skNote'); note.hidden = !!(tpl && tpl[system]) || readOnly;
+      var note = $('skNote'); note.hidden = !!(tpl && tpl[system]) || readOnly || SPA;
       note.textContent = "לדגם הזה עדיין אין תבנית ג'טים סטנדרטית, אז מסמנים את הג'טים ידנית. מיקום פתח השירות הוא נקודת התחלה בלבד.";
       $('skSave').hidden = readOnly; $('skSave').disabled = saving || !dirty; $('skSave').textContent = saving ? 'שומר…' : dirty ? 'שמירת השרטוט' : 'נשמר';
       syncSave2();
       $('skExtra').hidden = readOnly || dirty || saving || !!opt.customer;
-      $('skReset').hidden = readOnly; $('skReset').textContent = armed.reset ? 'ללחוץ שוב כדי לאפס' : 'איפוס לסטנדרט';
+      $('skReset').hidden = readOnly; $('skReset').textContent = armed.reset ? 'ללחוץ שוב כדי לאפס' : SPA ? 'ניקוי השרטוט' : 'איפוס לסטנדרט';
       $('skClose').textContent = armed.close ? 'לצאת בלי לשמור?' : 'חזרה ללוח';
       $('skNotes').disabled = readOnly;
     }
@@ -359,6 +385,7 @@ window.Sketch = (function () {
       else if (t === 'service') { var o = ['bottom', 'left', 'right', 'top'].filter(function (k) { return !S.walls[k]; })[0] || 'bottom', at = { bottom: [W / 2, H], top: [W / 2, 0], left: [0, H / 2], right: [W, H / 2] }[o]; place(it, at[0], at[1]); }
       else if (t === 'motor') place(it, 22, H - 22);
       else if (t === 'light') place(it, W / 2, H * 0.3);
+      else if (TYPES[t].spa) { var na = S.items.filter(function (i) { return !i.std; }).length; place(it, W * 0.2 + (na % 8) * W * 0.08, TYPES[t].w ? 8 : H * 0.4 + Math.floor(na / 8) % 4 * 14); } // spread new parts so they do not land on each other
       else if (t === 'reg' || t === 'btn') place(it, W * (t === 'reg' ? 0.14 : 0.36) + n * 13, 3.6);
       else place(it, W * 0.4 + (n % 6) * 8, H / 2);
       S.items.push(it); selId = it.id; touch();
@@ -397,6 +424,12 @@ window.Sketch = (function () {
     if (needLight && !readOnly) addLight();
     renderAll();
   }
+  // how many of each spa part the drawing holds, for the panel and the printed sheet
+  function spaCounts(data) {
+    var c = {}, out = []; ((data && data.items) || []).forEach(function (i) { if (TYPES[i.type] && TYPES[i.type].spa) c[i.type] = (c[i.type] || 0) + 1; });
+    Object.keys(TYPES).forEach(function (k) { if (c[k]) out.push({ n: TYPES[k].name, q: c[k], sku: '' }); });
+    return out;
+  }
   // True when a saved drawing has a problem that must be fixed before the customer can approve it.
   function hasBlocking(data) { return !!(data && data.blocking); }
   // The kit items that follow from a saved drawing: [{ n: name, q: quantity }]
@@ -418,5 +451,5 @@ window.Sketch = (function () {
     ['faucet', 'shower'].forEach(function (t) { if (c[t]) out.push({ n: TYPES[t].name, q: c[t], sku: '' }); });
     return out;
   }
-  return { open: open, hasBlocking: hasBlocking, kitOf: kitOf };
+  return { open: open, hasBlocking: hasBlocking, kitOf: kitOf, spaCounts: spaCounts };
 })();

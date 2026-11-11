@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-074404';
+  var APP_VERSION = '20261111-075047';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -70,6 +70,14 @@
   // what to show for a stored model code: the model name, plus the size when the model comes in more than one
   var SPA = window.MTI_SPA || { models: [] }, SPA_MODEL = {}; SPA.models.forEach(function (m) { SPA_MODEL[m.id] = m; });
   function pick(list, id) { var x = (list || []).find(function (p) { return p[0] === id; }); return x ? x[1] : ''; }
+  // the drawing model of a spa: size from the catalog dimensions, the top view from img/spa when there is one
+  var SPA_IMG = ['30101', '30200', '30250', '30330', '30401', '30440', '30501', '30570', '30740', '30801', '31101', '31201', '32000', '32034', '32100', '33000', '34300', '34500', '361301'];
+  function spaDrawModel(id) {
+    var m = SPA_MODEL[id]; if (!m) return null;
+    var n = (m.dims.match(/\d+/g) || ['200']).map(Number), w = n[0], h = n[1] || n[0], round = /קוטר/.test(m.dims);
+    return { code: id, name: m.name, dims: m.dims, w: w, h: h, shape: round ? 'round' : 'rect', src: SPA_IMG.indexOf(id) > -1 ? 'img/spa/' + id + '.jpg' : null };
+  }
+  function drawModel(o) { return kindOf(o) === 'spa' ? spaDrawModel(o.model) : MODEL[o.model] || null; }
   function kindOf(o) { return o && o.kind === 'spa' ? 'spa' : 'jacuzzi'; }
   // stations a given order skips, and where an order stands (fitting in Ashdod counts as Ashdod)
   function skips(s, o) { return kindOf(o) === 'spa' && ((s.k === 'cladding' && o.install && o.install !== 'above') || (s.k === 'kitSent' && o.equipLoc === 'ashdod')); }
@@ -125,7 +133,8 @@
   function isOffice() { return me && (me.role === 'admin' || me.role === 'office'); }
   function canWrite() { return me && me.role !== 'agent'; }
   function canAct(stage) { return isAdmin() || (me && stage.roles.indexOf(me.role) > -1); }
-  function canDraw(o) { return isOffice() && IDX[o.stage] <= IDX.approval; }
+  // jacuzzi: drawn until the customer approves; spa: until the technical review is signed off
+  function canDraw(o) { return isOffice() && IDX[o.stage] <= (kindOf(o) === 'spa' ? IDX.tech : IDX.approval); }
 
   // ---------- staying up to date ----------
   // version.json changes with every update of the site. A screen left open notices it and reloads itself when nothing is
@@ -326,8 +335,8 @@
     if (kindOf(o) === 'spa') h += spaSpec(o);
     if (isOffice() && !del) h += '<button class="btn" type="button" data-edit="' + id + '">עריכת פרטי ההזמנה</button>';
     if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר סידורי</label><input id="tn-' + id + '" inputmode="numeric" maxlength="' + (kindOf(o) === 'spa' ? 8 : 4) + '" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
-    if (MODEL[o.model]) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
-    if (MODEL[o.model] && o.sketch && me.role !== 'agent') h += '<button class="btn" type="button" data-skprint="' + id + '">הדפסת סקיצה למאבזר</button>';
+    if (drawModel(o)) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
+    if (drawModel(o) && o.sketch && me.role !== 'agent') h += '<button class="btn" type="button" data-skprint="' + id + '">הדפסת סקיצה למאבזר</button>';
     h += sendBox(o, '');
     if (f.unknown) return h + '<div class="issue warn">המסך הזה פועל בגרסה ישנה ולא מכיר את השלב של ההזמנה. <button class="btn small" type="button" data-reload="1">רענון</button></div></div>';
     if (!del) h += kitHtml(o, f);
@@ -512,14 +521,14 @@
   }
   // A4 sheet for the fitter in Barkan, who works without a screen: the jacuzzi number, the drawing and which jets go in. No customer details.
   function printSketch(o) {
-    var model = MODEL[o.model], sk = o.sketch; if (!model || !sk) return;
+    var model = drawModel(o), sk = o.sketch, spa = kindOf(o) === 'spa'; if (!model || !sk) return;
     var tmp = document.createElement('div'); tmp.style.display = 'none'; document.body.appendChild(tmp);
-    Sketch.open(tmp, { model: model, system: o.system, data: sk, readOnly: true });
+    Sketch.open(tmp, { kind: spa ? 'spa' : '', model: model, system: o.system, data: sk, readOnly: true });
     var svg = tmp.querySelector('#skSvg').outerHTML.replace('id="skSvg"', '');
     tmp.querySelector('#skClose').click(); tmp.remove();
-    var parts = Sketch.kitOf(sk).filter(function (x) { return /^ג'ט|^מנוע|^פנס|^יניקה|^ברז|^מזלף/.test(x.n); });
-    var facts = [['דגם', mname(o.model) + ' · ' + model.dims], ['מערכת', o.system], ['כיוון', !model.sides ? '' : sk.side === 'R' ? 'ימין' : sk.side === 'L' ? 'שמאל' : ''], ['פנס', sk.light === true ? 'יש' : 'אין'], ['פאנל', o.panel ? 'כן' : '']].filter(function (f) { return f[1]; });
-    $('printArea').innerHTML = '<div class="p-head"><div><div class="p-brand">MTI</div><h1>סקיצה לאיבזור</h1></div><div class="p-serial"><span>ג\'קוזי מס\'</span><b>' + esc(o.tubNum || '') + '</b></div></div>' +
+    var parts = spa ? Sketch.spaCounts(sk) : Sketch.kitOf(sk).filter(function (x) { return /^ג'ט|^מנוע|^פנס|^יניקה|^ברז|^מזלף/.test(x.n); });
+    var facts = spa ? [['דגם', mname(o.model)], ['איבזור', o.equipName], ['גוון ג\'טים', pick(SPA.jetColors, o.jetColor)], ['בקר', pick(SPA.controllers, o.controller)], ['התקנה', pick(SPA.installs, o.install)]].filter(function (f) { return f[1]; }) : [['דגם', mname(o.model) + ' · ' + model.dims], ['מערכת', o.system], ['כיוון', !model.sides ? '' : sk.side === 'R' ? 'ימין' : sk.side === 'L' ? 'שמאל' : ''], ['פנס', sk.light === true ? 'יש' : 'אין'], ['פאנל', o.panel ? 'כן' : '']].filter(function (f) { return f[1]; });
+    $('printArea').innerHTML = '<div class="p-head"><div><div class="p-brand">MTI</div><h1>סקיצה לאיבזור</h1></div><div class="p-serial"><span>' + (spa ? 'ספא מס\'' : 'ג\'קוזי מס\'') + '</span><b>' + esc(o.tubNum || '') + '</b></div></div>' +
       '<div class="p-facts">' + facts.map(function (f) { return '<div><span>' + esc(f[0]) + '</span><b>' + esc(f[1]) + '</b></div>'; }).join('') + '</div>' +
       '<div class="p-sketch">' + svg + '</div>' +
       '<table class="p-kit"><thead><tr><th>פריט</th><th class="c">כמות</th></tr></thead><tbody>' + parts.map(function (x) { return '<tr><td>' + esc(x.n) + '</td><td class="c q">' + esc(x.q) + '</td></tr>'; }).join('') + '</tbody></table>' +
@@ -556,9 +565,16 @@
   function arm(key) { if (st.armed[key]) { st.armed[key] = false; return true; } st.armed[key] = true; setTimeout(function () { if (st.armed[key]) { st.armed[key] = false; st.usersDirty = true; render(); } }, 3500); st.usersDirty = true; render(); return false; }
 
   function openSketch(o) {
-    var model = MODEL[o.model]; if (!model) return;
-    var edit = canDraw(o);
+    var model = drawModel(o); if (!model) return;
+    var edit = canDraw(o), spa = kindOf(o) === 'spa';
     st.sketchId = o.id;
+    if (spa) {
+      Sketch.open($('sketchView'), { kind: 'spa', model: model, data: o.sketch || null, readOnly: !edit, title: titleOf(o) + (o.equipName ? ' · ' + o.equipName : ''),
+        onClose: function () { st.sketchId = null; },
+        readOnlyNote: IDX[o.stage] > IDX.tech ? 'השרטוט ננעל אחרי הבדיקה הטכנית.' : 'תצוגה בלבד.',
+        onSave: function (data) { return col.doc(o.id).update({ sketch: data, sketchAt: new Date().toISOString() }); } });
+      return;
+    }
     Sketch.open($('sketchView'), {
       onClose: function () { st.sketchId = null; },
       model: model, system: o.system, data: o.sketch || null, readOnly: !edit || (!o.sketch && !edit),
