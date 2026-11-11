@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-094623';
+  var APP_VERSION = '20261111-103453';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -68,7 +68,8 @@
   var ADD = {
     taps: [['S-41', 'אינטרפוץ 3 דרך'], ['S-42', 'אינטרפוץ 3 דרך (2 חלקים)'], ['S-43', 'אינטרפוץ 4 דרך (3 חלקים)'], ['S-44', 'אינטרפוץ 4 דרך (4 חלקים)']],
     tapFin: [['nickel', 'ניקל'], ['gold', 'זהב'], ['white', 'לבן מט'], ['black', 'שחור מט']],
-    pillows: [['S-26', 'כרית וואקום'], ['S-130', 'כרית וואקום'], ['S-28', 'כרית נשלפת'], ['S-29', 'כרית נשלפת'], ['S-113', 'כרית נשלפת'], ['S-136', 'כרית נשלפת']],
+    // only pillows on brackets are fitted; the vacuum pillows are not offered here
+    pillows: [['S-28', 'עם תושבות'], ['S-29', 'עם תושבות'], ['S-113', 'עם תושבות'], ['S-136', 'עם תושבות']],
     pillowColors: [['black', 'שחור'], ['white', 'לבן']],
     waste: [['chrome', 'כרום / ניקל'], ['bronze_red', 'ברונזה אדומה (רוז גולד)'], ['bronze_old', 'ברונזה עתיק (זהב מט)'], ['graphite', 'גרפיט'], ['white_gloss', 'לבן מבריק'], ['white_mat', 'לבן מט'], ['nickel_brushed', 'ניקל מוברש'], ['black_mat', 'שחור מט']]
   };
@@ -377,6 +378,13 @@
           if (f.s.k === 'approval' && MODEL[o.model]) { if (!o.sketch) blockTxt = 'אי אפשר לאשר לפני שיש שרטוט.'; else if (o.sketchBlocking) blockTxt = 'בשרטוט יש בעיה מסומנת באדום. צריך לתקן לפני אישור.'; }
           h += '<button class="btn primary big" type="button" data-next="' + id + '"' + (busy || (blockTxt ? ' disabled' : '')) + '>' + f.s.done + (f.s.k === 'pack' && o.panel ? ' (כולל פאנל)' : '') + '</button>';
           if (blockTxt) h += '<div class="who">' + blockTxt + '</div>';
+          // the customer already approved a drawing with the order (e.g. through the store): skip sending it for approval
+          if (kindOf(o) === 'jacuzzi' && IDX[o.stage] <= IDX.approval) {
+            var skipBlock = o.sketch && o.sketchBlocking;
+            h += '<button class="btn" type="button" data-skipappr="' + id + '"' + (busy || (skipBlock ? ' disabled' : '')) + '>' + (st.armed['skip' + o.id] ? 'ללחוץ שוב: עוברים להזמנת קיט בלי אישור בקישור' : 'דילוג על אישור הלקוח (יש סקיצה מאושרת בהזמנה)') + '</button>';
+            if (skipBlock) h += '<div class="who">בשרטוט יש בעיה מסומנת באדום. מתקנים לפני שמדלגים.</div>';
+            else if (!o.sketch && drawModel(o)) h += '<div class="who">אין עדיין שרטוט במערכת: אחרי הדילוג רשימת הקיט לא תיגזר משרטוט, ומוסיפים פריטים ידנית.</div>';
+          }
           if (f.s.k === 'inspect') h += '<button class="btn danger" type="button" data-fail="' + id + '"' + busy + '>' + (st.armed['fail' + o.id] ? 'ללחוץ שוב: חוזר לברקן' : 'הבדיקה נכשלה, חוזר לברקן') + '</button>';
         }
         if (st.holdFor === o.id) {
@@ -657,6 +665,7 @@
     else if (d.kitdel && (o = find(d.kitdel))) { var ke = (o.kitExtra || []).slice(); ke.splice(+d.i, 1); write(o.id, function () { return col.doc(o.id).update({ kitExtra: ke }); }); }
     else if (d.kitprint && (o = find(d.kitprint))) printKit(o);
     else if (d.skprint && (o = find(d.skprint))) printSketch(o);
+    else if (d.skipappr && (o = find(d.skipappr))) { if (arm('skip' + o.id)) write(o.id, function () { return move(o, 'kitOrder', 'דילוג על אישור הלקוח: סקיצה מאושרת בהזמנה'); }); }
     else if (d.fail && (o = find(d.fail))) { if (arm('fail' + o.id)) write(o.id, function () { return move(o, 'toBarkan', 'הבדיקה נכשלה, חוזר לברקן'); }); }
     else if (d.holdopen) { st.holdFor = d.holdopen; render(); }
     else if (d.hold && (o = find(d.hold))) {
