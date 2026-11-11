@@ -132,7 +132,7 @@ window.Sketch = (function () {
       if (t === 'motor') return '<rect x="-11" y="-7.5" width="22" height="15" rx="2.5" fill="rgba(11,110,124,.16)" stroke="#0b6e7c" stroke-width=".7" stroke-dasharray="2 1.4"/>' + (small ? '' : '<text class="t-lbl" text-anchor="middle" y="1.5" fill="#0b4f59">מנוע</text>');
       // a service opening may also be cut through a wall (reached from the other side of it)
       if (t === 'service') { var thru = !small && it.side && S.walls[it.side];
-        return '<rect x="-20" y="-2.2" width="40" height="4.4" rx="1" fill="var(--accent)"' + (thru ? ' stroke="#fff" stroke-width=".5" stroke-dasharray="1.4 .9"' : '') + '/>' + (small ? '' : '<text class="t-lbl" text-anchor="middle" y="1.45" fill="var(--accent-ink)">' + (thru ? 'פתח שירות בקיר' : 'פתח שירות') + '</text>'); }
+        return '<rect x="-20" y="-2.2" width="40" height="4.4" rx="1" fill="#d62828"' + (thru ? ' stroke="#fff" stroke-width=".5" stroke-dasharray="1.4 .9"' : '') + '/>' + (small ? '' : '<text class="t-lbl" text-anchor="middle" y="1.45" fill="#ffffff">' + (thru ? 'פתח שירות בקיר' : 'פתח שירות') + '</text>'); }
       return '';
     }
     function tf(it) {
@@ -143,7 +143,7 @@ window.Sketch = (function () {
       var st = '', out = '', T = TYPES[it.type], sel = it.id === selId; // change marks are not drawn; only the selection outline
       if (it.type === 'service') {
         if (st) out += '<rect x="-21.3" y="-3.5" width="42.6" height="7" rx="2" fill="none" stroke="' + statusColor(st) + '" stroke-width="1"/>';
-        if (sel) out += '<rect x="-23" y="-5.2" width="46" height="10.4" rx="3" fill="none" stroke="var(--accent)" stroke-width=".7" stroke-dasharray="1.6 1.2"/>';
+        if (sel) out += '<rect x="-23" y="-5.2" width="46" height="10.4" rx="3" fill="none" stroke="#d62828" stroke-width=".7" stroke-dasharray="1.6 1.2"/>';
       } else if (it.type === 'motor') {
         if (st) out += '<rect x="-12.3" y="-8.8" width="24.6" height="17.6" rx="3.4" fill="none" stroke="' + statusColor(st) + '" stroke-width="1"/>';
         if (sel) out += '<rect x="-14" y="-10.5" width="28" height="21" rx="4.5" fill="none" stroke="#0b6e7c" stroke-width=".7" stroke-dasharray="1.6 1.2"/>';
