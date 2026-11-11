@@ -130,7 +130,9 @@ window.Sketch = (function () {
       if (t === 'faucet') return '<rect x="-3.4" y="-2" width="6.8" height="4" rx="1.2" fill="#c7ccd1" stroke="#5f666d" stroke-width=".5"/><rect x="-.9" y="0" width="1.8" height="5" rx=".9" fill="#aeb4ba" stroke="#5f666d" stroke-width=".5"/>';
       if (t === 'shower') return '<circle r="2.4" fill="#c7ccd1" stroke="#5f666d" stroke-width=".5"/><circle r=".35" cx="-.9" fill="#5f666d"/><circle r=".35" cx=".9" fill="#5f666d"/><circle r=".35" cy="-.9" fill="#5f666d"/><circle r=".35" cy=".9" fill="#5f666d"/>';
       if (t === 'motor') return '<rect x="-11" y="-7.5" width="22" height="15" rx="2.5" fill="rgba(11,110,124,.16)" stroke="#0b6e7c" stroke-width=".7" stroke-dasharray="2 1.4"/>' + (small ? '' : '<text class="t-lbl" text-anchor="middle" y="1.5" fill="#0b4f59">מנוע</text>');
-      if (t === 'service') return '<rect x="-20" y="-2.2" width="40" height="4.4" rx="1" fill="var(--accent)"/>' + (small ? '' : '<text class="t-lbl" text-anchor="middle" y="1.45" fill="var(--accent-ink)">פתח שירות</text>');
+      // a service opening may also be cut through a wall (reached from the other side of it)
+      if (t === 'service') { var thru = !small && it.side && S.walls[it.side];
+        return '<rect x="-20" y="-2.2" width="40" height="4.4" rx="1" fill="var(--accent)"' + (thru ? ' stroke="#fff" stroke-width=".5" stroke-dasharray="1.4 .9"' : '') + '/>' + (small ? '' : '<text class="t-lbl" text-anchor="middle" y="1.45" fill="var(--accent-ink)">' + (thru ? 'פתח שירות בקיר' : 'פתח שירות') + '</text>'); }
       return '';
     }
     function tf(it) {
@@ -233,8 +235,7 @@ window.Sketch = (function () {
       if (model.sides && !S.side) out.push(['bad', 'לא נבחר כיוון האמבטיה: ימין או שמאל.']);
       if (!S.motor) out.push(['bad', 'לא נבחר סוג מנוע.']);
       if (!svc.length) out.push(['bad', 'אין פתח שירות בשרטוט.']);
-      svc.forEach(function (s) { if (S.walls[s.side]) out.push(['bad', 'פתח השירות בצד ה' + SIDES[s.side] + ', ושם מסומן קיר. צריך להעביר את הפתח לצד פתוח.']); });
-      if (!Object.keys(SIDES).some(function (k) { return !S.walls[k]; })) out.push(['bad', 'האמבטיה סגורה בקירות מכל ארבעת הצדדים. אין מאיפה לגשת.']);
+      svc.forEach(function (s) { if (S.walls[s.side]) out.push(['ok', 'פתח השירות בצד ה' + SIDES[s.side] + ', בתוך הקיר: הגישה למנוע מהצד השני של הקיר.']); });
       var jets = S.items.filter(function (i) { return i.type === 'jet'; }), close = 0;
       for (var a = 0; a < jets.length; a++) for (var b = a + 1; b < jets.length; b++) if (dist(jets[a], jets[b]) < 6) close++;
       if (close) out.push(['warn', "יש ג'טים במרחק של פחות מ-6 " + CM + ' זה מזה.']);
@@ -248,7 +249,7 @@ window.Sketch = (function () {
     }
     function renderLists() {
       var list = issues();
-      $('skIssues').innerHTML = list.length ? list.map(function (i) { return '<div class="issue ' + i[0] + '">' + esc(i[1]) + (i[2] === 'jetok' && !readOnly ? ' <button class="btn small" type="button" data-jetok="1">זו חריגה מכוונת, לאשר</button>' : '') + '</div>'; }).join('') : '<div class="issue ok">השרטוט תקין: פתח השירות פונה לצד פתוח.</div>';
+      $('skIssues').innerHTML = list.length ? list.map(function (i) { return '<div class="issue ' + i[0] + '">' + esc(i[1]) + (i[2] === 'jetok' && !readOnly ? ' <button class="btn small" type="button" data-jetok="1">זו חריגה מכוונת, לאשר</button>' : '') + '</div>'; }).join('') : '<div class="issue ok">השרטוט תקין.</div>';
       // short summary only: which hand and which sides are walls (positions are read off the drawing itself)
       var li = [], walls = Object.keys(SIDES).filter(function (k) { return S.walls[k]; }).map(function (k) { return SIDES[k]; });
       if (model.sides) li.push('<li><span class="dot wall"></span><span>כיוון האמבטיה: ' + (S.side === 'R' ? 'ימין' : S.side === 'L' ? 'שמאל' : 'לא נבחר') + '</span></li>');
