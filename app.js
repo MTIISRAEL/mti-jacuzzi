@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-073641';
+  var APP_VERSION = '20261111-074025';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -152,7 +152,8 @@
   function custLink(o) { return location.origin + location.pathname.replace(/[^\/]*$/, '') + 's.html?a=' + o.approvalToken; }
   function intlPhone(p) { var d = String(p || '').replace(/\D/g, ''); if (d.indexOf('972') === 0) return d; if (d.charAt(0) === '0') return '972' + d.slice(1); return d; }
   // card title: the store first, then the end customer ("קרמיק דיפו - שמעון")
-  function titleOf(o) { return [o.store, o.customer].filter(Boolean).join(' - ') || (o.num ? 'הזמנה ' + o.num : 'ללא שם'); }
+  // a spa is mostly sold to private customers: the customer first, the store (if any) in brackets
+  function titleOf(o) { if (kindOf(o) === 'spa') return (o.customer || o.store || (o.num ? 'הזמנה ' + o.num : 'ללא שם')) + (o.customer && o.store ? ' (' + o.store + ')' : ''); return [o.store, o.customer].filter(Boolean).join(' - ') || (o.num ? 'הזמנה ' + o.num : 'ללא שם'); }
   function custMessage(o) { return 'שלום' + (o.customer ? ' ' + o.customer : '') + ', כאן MTI. מצורפת סקיצת הג\'קוזי שהזמנת' + (o.model ? ' (' + (MODEL[o.model] && MODEL[o.model].name || o.model) + ')' : '') + '. נא לבדוק את הקירות, פריסת הג\'טים ופתח השירות, ולאשר בקישור:\n' + custLink(o); }
   async function customerMode() {
     ['loginView', 'noAccessView', 'appView'].forEach(function (v) { $(v).hidden = true; });
@@ -367,7 +368,7 @@
     var h = '<h2>' + (o ? 'עריכת פרטי ההזמנה · ' + esc(titleOf(o)) : 'הזמנה חדשה · ' + TR.word) + '</h2><div class="grid">';
     if (st.kind === 'spa') {
       h += fInp('nNum', 'מס\' הזמנה באינטגרל', v('num'), ' inputmode="numeric"') + (o ? '' : fInp('nTub', 'מספר סידורי', '', ' inputmode="numeric" maxlength="8"')) +
-        fInp('nStore', 'חנות', v('store')) + fInp('nCust', 'לקוח (לא חובה)', v('customer')) + fInp('nPhone', 'טלפון הלקוח', v('phone'), ' inputmode="tel" dir="ltr"') + fInp('nAddr', 'כתובת', v('address')) + agentSel +
+        fInp('nCust', 'לקוח/ה', v('customer')) + fInp('nStore', 'חנות (רק אם ההזמנה דרך חנות)', v('store')) + fInp('nPhone', 'טלפון הלקוח', v('phone'), ' inputmode="tel" dir="ltr"') + fInp('nAddr', 'כתובת', v('address')) + agentSel +
         fSel('nModel', 'דגם', SPA.models.map(function (m) { return [m.id, m.name + ' · ' + m.dims + (m.swim ? ' · בריכת זרמים' : '')]; }), v('model'), 'בחירת דגם') +
         '<label for="nEquip">איבזור<select id="nEquip">' + equipOpts(v('model'), v('equipName')) + '</select></label>' +
         fSel('nAcrylic', 'צבע אקריל', SPA.acrylics.map(function (a) { return [a[0], a[1] + ' · ' + a[0]]; }), v('acrylic'), 'בחירה') + fSel('nCabinet', 'חיפוי', SPA.cabinets, v('cabinet'), 'בחירה') +
