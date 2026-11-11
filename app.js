@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-094012';
+  var APP_VERSION = '20261111-094146';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -70,16 +70,14 @@
     tapFin: [['nickel', 'ניקל'], ['gold', 'זהב'], ['white', 'לבן מט'], ['black', 'שחור מט']],
     pillows: [['S-26', 'כרית וואקום'], ['S-130', 'כרית וואקום'], ['S-28', 'כרית נשלפת'], ['S-29', 'כרית נשלפת'], ['S-113', 'כרית נשלפת'], ['S-136', 'כרית נשלפת']],
     pillowColors: [['black', 'שחור'], ['white', 'לבן']],
-    hatches: [['alu30', 'תריס אלומיניום 30X40', 'hatch-alu'], ['alu40', 'תריס אלומיניום 40X40', 'hatch-alu'], ['ceramic', 'פתח לחיפוי קרמיקה', 'hatch-ceramic']],
     waste: [['chrome', 'כרום / ניקל'], ['bronze_red', 'ברונזה אדומה (רוז גולד)'], ['bronze_old', 'ברונזה עתיק (זהב מט)'], ['graphite', 'גרפיט'], ['white_gloss', 'לבן מבריק'], ['white_mat', 'לבן מט'], ['nickel_brushed', 'ניקל מוברש'], ['black_mat', 'שחור מט']]
   };
   function tapImg(code, fin) { return 'img/addons/' + code + '-' + (fin || 'nickel') + '.jpg'; }
   // the add-on lines of a home jacuzzi order, for the card, the kit and the fitter's sheet
   function addonLines(o) {
-    var out = [], t = pick(ADD.taps, o.tap), h = ADD.hatches.find(function (x) { return x[0] === o.hatch; }), pl = pick(ADD.pillows, o.pillow);
+    var out = [], t = pick(ADD.taps, o.tap), pl = pick(ADD.pillows, o.pillow);
     if (t) out.push({ n: 'סט ברזים ' + o.tap + ' ' + t + ' · ' + (pick(ADD.tapFin, o.tapFin) || 'ניקל'), q: 1, sku: '' });
     if (pl) out.push({ n: 'כרית ראש ' + o.pillow + ' ' + pl + (o.pillowColor ? ' · ' + pick(ADD.pillowColors, o.pillowColor) : ''), q: o.pillowQty || 1, sku: '' });
-    if (h) out.push({ n: h[1], q: 1, sku: '' });
     return out;
   }
   var HOLDS = ['חסר חלק', 'ממתין ללקוח', 'תקלה באמבטיה'];
@@ -415,7 +413,6 @@
       '<div class="row">' + fSel('nTapFin', 'גימור הברז', ADD.tapFin, fin) + '</div>' +
       '<div class="lbl">כרית ראש</div>' + pickRow('nPillow', v('pillow'), ADD.pillows.map(function (p) { return [p[0], p[0] + ' · ' + p[1], 'img/addons/' + p[0] + '.jpg']; })) +
       '<div class="row">' + fSel('nPillowColor', 'גוון הכרית', ADD.pillowColors, v('pillowColor') || 'black') + fInp('nPillowQty', 'כמות כריות', String(v('pillowQty') || 1), ' type="number" min="1" max="4" inputmode="numeric"') + '</div>' +
-      '<div class="lbl">פתח שירות / תריס</div>' + pickRow('nHatch', v('hatch'), ADD.hatches.map(function (h) { return [h[0], h[1], 'img/addons/' + h[2] + '.jpg']; })) +
       '<div class="row">' + fSel('nWaste', 'גוון אביק', ADD.waste, v('waste') || 'chrome') + '</div></div>';
   }
   function renderForm() {
@@ -688,7 +685,7 @@
         touch4: on('nTouch4'), ozone: on('nOzone'), uv: on('nUv'),
         jetSup: SPA.jetSuppliers.filter(function (n, k) { return on('nSup' + k); }), acc: SPA.accessories.filter(function (a, k) { return on('nAcc' + k); }).map(function (a) { return a[0]; }) });
     } else Object.assign(d, { system: val('nSys'), custEmail: val('nEmail'), panel: on('nPanel'),
-      tap: val('nTap'), tapFin: val('nTapFin'), pillow: val('nPillow'), pillowColor: val('nPillowColor'), pillowQty: Math.max(1, Math.min(4, parseInt(val('nPillowQty'), 10) || 1)), hatch: val('nHatch'), waste: val('nWaste') });
+      tap: val('nTap'), tapFin: val('nTapFin'), pillow: val('nPillow'), pillowColor: val('nPillowColor'), pillowQty: Math.max(1, Math.min(4, parseInt(val('nPillowQty'), 10) || 1)), waste: val('nWaste') });
     return d;
   }
   $('form').addEventListener('click', async function (ev) {
