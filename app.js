@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-073508';
+  var APP_VERSION = '20261111-073641';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -43,13 +43,13 @@
   var S_LOCS = [
     { k: 'a1', n: 'אשדוד · מכירה וקיט',  c: 'var(--ashdod)' },
     { k: 'bk', n: 'ברקן · ייצור',        c: 'var(--barkan)' },
-    { k: 'a2', n: 'אשדוד · טסט ומסירה',  c: 'var(--ashdod)' }
+    { k: 'a2', n: 'אשדוד · טסט ומסירה',  c: 'var(--back)' }
   ];
   var J_LOCS = [
     { k: 'a1',   n: 'אשדוד · הכנה',           c: 'var(--ashdod)' },
     { k: 'road', n: 'בדרך במשאית',            c: 'var(--road)' },
     { k: 'bk',   n: 'ברקן',                   c: 'var(--barkan)' },
-    { k: 'a2',   n: 'אשדוד · בדיקה ואספקה',   c: 'var(--ashdod)' }
+    { k: 'a2',   n: 'אשדוד · בדיקה ואספקה',   c: 'var(--back)' }
   ];
   // the two trackers. kitStage: where the office builds the kit list; kitFrom..kitTo: where the frozen list is shown.
   var TRACK = {
@@ -59,7 +59,7 @@
   var TR, STAGES, IDX, LOCS;
   function useTrack(k) { TR = TRACK[k] || TRACK.jacuzzi; STAGES = TR.stages; LOCS = TR.locs; IDX = {}; STAGES.forEach(function (s, i) { IDX[s.k] = i; }); }
   useTrack('jacuzzi');
-  var LOCC = { a1: 'var(--ashdod)', a2: 'var(--ashdod)', bk: 'var(--barkan)', road: 'var(--road)', done: 'var(--ok)' };
+  var LOCC = { a1: 'var(--ashdod)', a2: 'var(--back)', bk: 'var(--barkan)', road: 'var(--road)', done: 'var(--ok)' };
   var ROLES = { admin: 'מנהל', office: 'משרד', warehouse: 'מחסן אשדוד', barkan: 'מנהל ברקן', driver: 'נהג', agent: 'סוכן' };
   // Field agents by name. An agent who should sign in and see only their own orders is also added under Users
   // with the role 'agent' and exactly the same name; new orders are then linked to that account.
@@ -278,7 +278,12 @@
       '<button class="btn small' + (st.tab === 'done' ? ' primary' : '') + '" type="button" data-tab="done">סופקו (' + nDel + ')</button>' +
       (st.loc ? '<button class="btn small" type="button" data-loc-clear="1">הצג את כל המקומות</button>' : '');
   }
-  function stepsBar(i) { var h = ''; for (var j = 0; j < STAGES.length - 1; j++) h += '<i class="' + (j < i ? 'd' : j === i ? 'c' : '') + '"></i>'; return '<div class="steps" aria-hidden="true">' + h + '</div>'; }
+  // where the tub is at a stage: a1 still in Ashdod, bk in Barkan, a2 back in Ashdod; a truck ride counts as its destination
+  function phaseOf(k, o) { var j = IDX[k], s = STAGES[j]; while (s && s.loc === 'road' && STAGES[j + 1]) s = STAGES[++j]; return s ? locOf(s, o) : 'a1'; }
+  function stepsBar(o) {
+    var list = STAGES.filter(function (s) { return s.k !== 'delivered' && !skips(s, o); }), cur = list.findIndex(function (s) { return s.k === o.stage; });
+    return '<div class="steps" aria-hidden="true">' + list.map(function (s, j) { return '<i class="' + (j < cur ? 'd' : j === cur ? 'c' : '') + '" style="--pc:' + LOCC[phaseOf(s.k, o)] + '"></i>'; }).join('') + '</div>';
+  }
   function cardHtml(x) {
     var o = x.o, f = x.f, del = o.stage === 'delivered', open = st.openId === o.id;
     var chips = '<span class="chip' + (del ? ' ok' : '') + '">' + f.s.n + '</span>';
@@ -293,7 +298,7 @@
       : [mname(o.model), o.system, o.panel ? 'כולל פאנל' : '']).concat([o.agent ? 'סוכן: ' + o.agent : '']).filter(Boolean).map(esc).join(' · ');
     var h = '<div class="card' + (f.hold ? ' hold' : f.late ? ' late' : '') + '" style="--lc:' + LOCC[f.loc] + '"><button type="button" data-open="' + esc(o.id) + '" aria-expanded="' + open + '">' +
       '<div class="c-top"><span class="c-cust">' + esc(titleOf(o)) + '</span><span class="c-num">' + [o.tubNum ? 'סידורי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · ') + '</span></div>' +
-      (meta ? '<div class="c-meta">' + meta + '</div>' : '') + '<div class="c-stage">' + chips + '</div>' + (del ? '' : stepsBar(f.i)) + '<div class="c-eta">' + eta + '</div></button>';
+      (meta ? '<div class="c-meta">' + meta + '</div>' : '') + '<div class="c-stage">' + chips + '</div>' + (del ? '' : stepsBar(o)) + '<div class="c-eta">' + eta + '</div></button>';
     if (open) h += detailHtml(o, f);
     return h + '</div>';
   }

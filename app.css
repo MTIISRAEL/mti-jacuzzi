@@ -10,19 +10,19 @@ img { max-width: 100%; }
 :root {
   --bg: #eef1f3; --surface: #ffffff; --ink: #172026; --muted: #5b6770; --line: #cfd6db;
   --accent: #0b6e7c; --accent-ink: #ffffff;
-  --ashdod: #0b6e7c; --barkan: #4b4fa8; --road: #5b6770;
+  --ashdod: #0b6e7c; --barkan: #4b4fa8; --back: #2f8a4c; --road: #5b6770;
   --warn: #9a5b00; --warn-bg: #fdf1dc; --bad: #b3261e; --bad-bg: #fbe6e4; --ok: #1d7a46; --ok-bg: #e2f3e9;
   --display: "Rubik", "Heebo", system-ui, sans-serif; --body: "Heebo", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #11171b; --surface: #1a2227; --ink: #e8edf0; --muted: #9aa7b0; --line: #33404a;
   --accent: #4fc3d1; --accent-ink: #06262b;
-  --ashdod: #4fc3d1; --barkan: #a5a8f0; --road: #9aa7b0;
+  --ashdod: #4fc3d1; --barkan: #a5a8f0; --back: #6fd39a; --road: #9aa7b0;
   --warn: #f0b354; --warn-bg: #3a2c12; --bad: #ff8a80; --bad-bg: #3d1b19; --ok: #6fd39a; --ok-bg: #143023; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #11171b; --surface: #1a2227; --ink: #e8edf0; --muted: #9aa7b0; --line: #33404a;
   --accent: #4fc3d1; --accent-ink: #06262b;
-  --ashdod: #4fc3d1; --barkan: #a5a8f0; --road: #9aa7b0;
+  --ashdod: #4fc3d1; --barkan: #a5a8f0; --back: #6fd39a; --road: #9aa7b0;
   --warn: #f0b354; --warn-bg: #3a2c12; --bad: #ff8a80; --bad-bg: #3d1b19; --ok: #6fd39a; --ok-bg: #143023; color-scheme: dark }
 
 body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45; direction: rtl; }
@@ -70,7 +70,9 @@ h2 { font-family: var(--display); font-size: 15px; font-weight: 500; margin: 0; 
 .c-eta { font-size: 13.5px; font-variant-numeric: tabular-nums; }
 .steps { display: flex; gap: 3px; direction: rtl; }
 .steps i { flex: 1; height: 5px; border-radius: 3px; background: var(--line); }
-.steps i.d { background: var(--lc); } .steps i.c { background: var(--lc); outline: 2px solid color-mix(in srgb, var(--lc) 35%, transparent); }
+/* each segment in the colour of where the tub is at that stage (--pc): Ashdod, Barkan, back in Ashdod; the stages still ahead are faint */
+.steps i { background: color-mix(in srgb, var(--pc, var(--line)) 22%, var(--line)); }
+.steps i.d { background: var(--pc); } .steps i.c { background: var(--pc); outline: 2px solid color-mix(in srgb, var(--pc) 35%, transparent); }
 .card.late .steps i.c { background: var(--bad); outline-color: var(--bad-bg); } .card.hold .steps i.c { background: var(--warn); outline-color: var(--warn-bg); }
 
 .detail { border-top: 1px solid var(--line); padding: 12px 13px 14px; display: flex; flex-direction: column; gap: 12px; }
