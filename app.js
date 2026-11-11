@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-104643';
+  var APP_VERSION = '20261111-132854';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -300,10 +300,13 @@
     var stSel = $('stageSel'), open = st.orders.filter(function (o) { return o.stage !== 'delivered'; }), cnt = {};
     open.forEach(function (o) { cnt[o.stage] = (cnt[o.stage] || 0) + 1; });
     if (st.stageF && !IDX.hasOwnProperty(st.stageF)) st.stageF = '';
+    // a location itself can be chosen too ("loc:<key>"), then each of its stages, indented under it
+    var locCnt = {}; open.forEach(function (o) { var k = locOf(STAGES[IDX[o.stage] || 0], o); locCnt[k] = (locCnt[k] || 0) + 1; });
     stSel.innerHTML = '<option value="">כל השלבים (' + open.length + ')</option>' + LOCS.map(function (L) {
-      return '<optgroup label="' + esc(L.n) + '">' + STAGES.filter(function (x) { return x.loc === L.k; }).map(function (x) { return '<option value="' + x.k + '">' + esc(x.n) + ' (' + (cnt[x.k] || 0) + ')</option>'; }).join('') + '</optgroup>';
+      return '<option value="loc:' + L.k + '">■ ' + esc(L.n) + ' · הכול (' + (locCnt[L.k] || 0) + ')</option>' +
+        STAGES.filter(function (x) { return x.loc === L.k; }).map(function (x) { return '<option value="' + x.k + '">\u00a0\u00a0\u00a0\u00a0' + esc(x.n) + ' (' + (cnt[x.k] || 0) + ')</option>'; }).join('');
     }).join('');
-    stSel.value = st.stageF;
+    stSel.value = st.stageF || (st.loc ? 'loc:' + st.loc : '');
     var sel = $('agentSel'), keys = Object.keys(agents).sort();
     sel.hidden = me.role === 'agent' || !keys.length;
     sel.innerHTML = '<option value="">כל הסוכנים</option>' + keys.map(function (a) { return '<option value="' + esc(a) + '">' + esc(a) + '</option>'; }).join('');
@@ -711,7 +714,7 @@
   });
   $('q').addEventListener('input', function () { st.q = this.value; renderList(new Date()); });
   $('agentSel').addEventListener('change', function () { st.agent = this.value; render(); });
-  $('stageSel').addEventListener('change', function () { st.stageF = this.value; if (st.stageF) { st.tab = 'open'; st.loc = ''; } render(); });
+  $('stageSel').addEventListener('change', function () { var v = this.value; if (v.indexOf('loc:') === 0) { st.loc = v.slice(4); st.stageF = ''; } else { st.stageF = v; st.loc = ''; } if (v) st.tab = 'open'; render(); });
   $('newBtn').addEventListener('click', function () { st.form = !st.form || !!st.editId; st.editId = null; st.usersOpen = false; $('form').innerHTML = ''; render(); if (st.form) $('nCust').focus(); });
   $('usersBtn').addEventListener('click', function () { st.usersOpen = !st.usersOpen; st.form = false; st.usersDirty = true; render(); });
   $('form').addEventListener('input', function (ev) {
