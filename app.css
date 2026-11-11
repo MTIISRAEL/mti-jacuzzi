@@ -277,3 +277,14 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 }
 /* a label that wraps to two lines must not push its field out of line with the fields beside it */
 .form .grid > label:not(.chk) { justify-content: flex-end; }
+
+/* jacuzzi add-ons in the order form: picture buttons */
+.form .addons { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.form .addons h3 { margin: 0; font-size: 15px; }
+.form .addons .lbl { color: var(--muted); font-size: 13px; }
+.form .addons .row label { flex: 1 1 140px; }
+.pick { display: flex; flex-wrap: wrap; gap: 8px; }
+.pick button { width: 104px; min-height: 64px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); padding: 5px; font: inherit; font-size: 12px; line-height: 1.25; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; text-align: center; }
+.pick button img { width: 88px; height: 62px; object-fit: contain; background: #fff; border-radius: 6px; }
+.pick button.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.pick .none { color: var(--muted); font-size: 13px; }

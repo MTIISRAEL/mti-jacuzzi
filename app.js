@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-090201';
+  var APP_VERSION = '20261111-094012';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -64,6 +64,24 @@
   // Field agents by name. An agent who should sign in and see only their own orders is also added under Users
   // with the role 'agent' and exactly the same name; new orders are then linked to that account.
   var AGENTS = ['רונן', 'מתן', 'יניב', 'אסתר'];
+  // home jacuzzi add-ons, as in the digital catalog (catalog codes, not ERP item numbers); pictures in img/addons
+  var ADD = {
+    taps: [['S-41', 'אינטרפוץ 3 דרך'], ['S-42', 'אינטרפוץ 3 דרך (2 חלקים)'], ['S-43', 'אינטרפוץ 4 דרך (3 חלקים)'], ['S-44', 'אינטרפוץ 4 דרך (4 חלקים)']],
+    tapFin: [['nickel', 'ניקל'], ['gold', 'זהב'], ['white', 'לבן מט'], ['black', 'שחור מט']],
+    pillows: [['S-26', 'כרית וואקום'], ['S-130', 'כרית וואקום'], ['S-28', 'כרית נשלפת'], ['S-29', 'כרית נשלפת'], ['S-113', 'כרית נשלפת'], ['S-136', 'כרית נשלפת']],
+    pillowColors: [['black', 'שחור'], ['white', 'לבן']],
+    hatches: [['alu30', 'תריס אלומיניום 30X40', 'hatch-alu'], ['alu40', 'תריס אלומיניום 40X40', 'hatch-alu'], ['ceramic', 'פתח לחיפוי קרמיקה', 'hatch-ceramic']],
+    waste: [['chrome', 'כרום / ניקל'], ['bronze_red', 'ברונזה אדומה (רוז גולד)'], ['bronze_old', 'ברונזה עתיק (זהב מט)'], ['graphite', 'גרפיט'], ['white_gloss', 'לבן מבריק'], ['white_mat', 'לבן מט'], ['nickel_brushed', 'ניקל מוברש'], ['black_mat', 'שחור מט']]
+  };
+  function tapImg(code, fin) { return 'img/addons/' + code + '-' + (fin || 'nickel') + '.jpg'; }
+  // the add-on lines of a home jacuzzi order, for the card, the kit and the fitter's sheet
+  function addonLines(o) {
+    var out = [], t = pick(ADD.taps, o.tap), h = ADD.hatches.find(function (x) { return x[0] === o.hatch; }), pl = pick(ADD.pillows, o.pillow);
+    if (t) out.push({ n: 'סט ברזים ' + o.tap + ' ' + t + ' · ' + (pick(ADD.tapFin, o.tapFin) || 'ניקל'), q: 1, sku: '' });
+    if (pl) out.push({ n: 'כרית ראש ' + o.pillow + ' ' + pl + (o.pillowColor ? ' · ' + pick(ADD.pillowColors, o.pillowColor) : ''), q: o.pillowQty || 1, sku: '' });
+    if (h) out.push({ n: h[1], q: 1, sku: '' });
+    return out;
+  }
   var HOLDS = ['חסר חלק', 'ממתין ללקוח', 'תקלה באמבטיה'];
   var DAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
   var MODELS = window.MTI_MODELS || [], MODEL = {}; MODELS.forEach(function (m) { MODEL[m.code] = m; });
@@ -333,6 +351,7 @@
     var id = esc(o.id), busy = st.busy[o.id] ? ' disabled' : '', del = o.stage === 'delivered', h = '<div class="detail">';
     if (o.notes) h += '<div class="notes">' + esc(o.notes) + '</div>';
     if (kindOf(o) === 'spa') h += spaSpec(o);
+    else { var al = addonLines(o).map(function (x) { return x.n + (x.q > 1 ? ' ×' + x.q : ''); }); if (o.waste && o.waste !== 'chrome') al.push('אביק ' + pick(ADD.waste, o.waste)); if (al.length) h += '<dl class="spec"><dt>תוספות</dt><dd>' + al.map(esc).join('<br>') + '</dd></dl>'; }
     if (isOffice() && !del) h += '<button class="btn" type="button" data-edit="' + id + '">עריכת פרטי ההזמנה</button>';
     if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר סידורי</label><input id="tn-' + id + '" inputmode="numeric" maxlength="' + (kindOf(o) === 'spa' ? 8 : 4) + '" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
     if (drawModel(o)) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
@@ -383,6 +402,22 @@
   function fInp(id, label, val, attrs) { return '<label for="' + id + '">' + label + '<input id="' + id + '" autocomplete="off" value="' + esc(val || '') + '"' + (attrs || '') + '></label>'; }
   function fChk(id, label, on) { return '<label class="chk" for="' + id + '"><input id="' + id + '" type="checkbox"' + (on ? ' checked' : '') + '>' + label + '</label>'; }
   function equipOpts(modelId, cur) { var m = SPA_MODEL[modelId]; return opts(m ? m.equip.map(function (e) { return [e[1], e[1] + (e[0] ? ' · מק"ט ' + e[0] : '')]; }) : [], cur, m ? 'בחירת איבזור' : 'בוחרים קודם דגם'); }
+  // picture choices: a hidden field holds the value, the buttons set it
+  function pickRow(field, cur, items) {
+    return '<input type="hidden" id="' + field + '" value="' + esc(cur || '') + '"><div class="pick" data-for="' + field + '">' +
+      '<button type="button" data-val=""' + (cur ? '' : ' class="on"') + '><span class="none">ללא</span></button>' +
+      items.map(function (it) { return '<button type="button" data-val="' + esc(it[0]) + '"' + (it[0] === cur ? ' class="on"' : '') + '>' + (it[2] ? '<img src="' + it[2] + '" alt="" loading="lazy">' : '') + '<span>' + esc(it[1]) + '</span></button>'; }).join('') + '</div>';
+  }
+  function addonsForm(v) {
+    var fin = v('tapFin') || 'nickel';
+    return '<div class="wide addons"><h3>תוספות</h3>' +
+      '<div class="lbl">סט ברזים</div>' + pickRow('nTap', v('tap'), ADD.taps.map(function (t) { return [t[0], t[0] + ' · ' + t[1], tapImg(t[0], fin)]; })) +
+      '<div class="row">' + fSel('nTapFin', 'גימור הברז', ADD.tapFin, fin) + '</div>' +
+      '<div class="lbl">כרית ראש</div>' + pickRow('nPillow', v('pillow'), ADD.pillows.map(function (p) { return [p[0], p[0] + ' · ' + p[1], 'img/addons/' + p[0] + '.jpg']; })) +
+      '<div class="row">' + fSel('nPillowColor', 'גוון הכרית', ADD.pillowColors, v('pillowColor') || 'black') + fInp('nPillowQty', 'כמות כריות', String(v('pillowQty') || 1), ' type="number" min="1" max="4" inputmode="numeric"') + '</div>' +
+      '<div class="lbl">פתח שירות / תריס</div>' + pickRow('nHatch', v('hatch'), ADD.hatches.map(function (h) { return [h[0], h[1], 'img/addons/' + h[2] + '.jpg']; })) +
+      '<div class="row">' + fSel('nWaste', 'גוון אביק', ADD.waste, v('waste') || 'chrome') + '</div></div>';
+  }
   function renderForm() {
     var f = $('form'), on = st.form || !!st.editId; f.hidden = !on; if (!on) { f.innerHTML = ''; return; }
     if (f.innerHTML) return;
@@ -412,7 +447,7 @@
         fSel('nModel', 'דגם אמבטיה', MODELS.map(function (m) { return [m.code, (m.name || m.code) + ' · ' + m.dims]; }), v('model'), 'בחירת דגם') +
         fSel('nSys', 'מערכת', [['BASIC', 'BASIC'], ['TITANIUM', 'TITANIUM'], ['אחר', 'אחר']], v('system') || 'BASIC') + agentSel +
         fInp('nPhone', 'טלפון הלקוח', v('phone'), ' inputmode="tel" dir="ltr"') + fInp('nEmail', 'מייל הלקוח', v('custEmail'), ' type="email" dir="ltr"') +
-        fChk('nPanel', 'הלקוח הזמין פאנל', v('panel'));
+        fChk('nPanel', 'הלקוח הזמין פאנל', v('panel')) + addonsForm(v);
     }
     h += '<label class="wide" for="nNotes">הערות<textarea id="nNotes" rows="2">' + esc(v('notes')) + '</textarea></label></div>' +
       '<div class="who" id="nWarn" hidden></div>' +
@@ -484,7 +519,7 @@
   // office added by hand; at hand-over it is frozen into o.kitList, where the warehouse ticks each line.
   // the spa kit for now: the equipment level by its item number, plus the options that were ordered (exact lists to follow)
   function kitBase(o) {
-    if (kindOf(o) !== 'spa') return Sketch.kitOf(o.sketch);
+    if (kindOf(o) !== 'spa') return Sketch.kitOf(o.sketch).concat(addonLines(o));
     var m = SPA_MODEL[o.model], out = [], c = pick(SPA.controllers, o.controller);
     if (m) out.push({ n: 'איבזור ' + (o.equipName || '') + ' · ' + m.name, q: 1, sku: o.equip || '' });
     if (c) out.push({ n: 'בקר ' + c, q: 1, sku: '' });
@@ -526,7 +561,7 @@
     Sketch.open(tmp, { kind: spa ? 'spa' : '', model: model, system: o.system, data: sk, readOnly: true });
     var svg = tmp.querySelector('#skSvg').outerHTML.replace('id="skSvg"', '');
     tmp.querySelector('#skClose').click(); tmp.remove();
-    var parts = spa ? Sketch.spaCounts(sk) : Sketch.kitOf(sk).filter(function (x) { return /^ג'ט|^מנוע|^פנס|^יניקה|^ברז|^מזלף/.test(x.n); });
+    var parts = spa ? Sketch.spaCounts(sk) : Sketch.kitOf(sk).filter(function (x) { return /^ג'ט|^מנוע|^פנס|^יניקה|^ברז|^מזלף/.test(x.n); }).concat(addonLines(o));
     var facts = spa ? [['דגם', mname(o.model)], ['איבזור', o.equipName], ['גוון ג\'טים', pick(SPA.jetColors, o.jetColor)], ['בקר', pick(SPA.controllers, o.controller)], ['התקנה', pick(SPA.installs, o.install)]].filter(function (f) { return f[1]; }) : [['דגם', mname(o.model) + ' · ' + model.dims], ['מערכת', o.system], ['כיוון', !model.sides ? '' : sk.side === 'R' ? 'ימין' : sk.side === 'L' ? 'שמאל' : ''], ['פנס', sk.light === true ? 'יש' : 'אין'], ['פאנל', o.panel ? 'כן' : '']].filter(function (f) { return f[1]; });
     $('printArea').innerHTML = '<div class="p-head"><div><div class="p-brand">MTI</div><h1>סקיצה לאיבזור</h1></div><div class="p-serial"><span>' + (spa ? 'ספא מס\'' : 'ג\'קוזי מס\'') + '</span><b>' + esc(o.tubNum || '') + '</b></div></div>' +
       '<div class="p-facts">' + facts.map(function (f) { return '<div><span>' + esc(f[0]) + '</span><b>' + esc(f[1]) + '</b></div>'; }).join('') + '</div>' +
@@ -637,6 +672,7 @@
   $('newBtn').addEventListener('click', function () { st.form = !st.form || !!st.editId; st.editId = null; st.usersOpen = false; $('form').innerHTML = ''; render(); if (st.form) $('nCust').focus(); });
   $('usersBtn').addEventListener('click', function () { st.usersOpen = !st.usersOpen; st.form = false; st.usersDirty = true; render(); });
   $('form').addEventListener('change', function (ev) {
+    if (ev.target.id === 'nTapFin') document.querySelectorAll('.pick[data-for="nTap"] button[data-val]').forEach(function (b) { var im = b.querySelector('img'); if (im) im.src = tapImg(b.dataset.val, ev.target.value); });
     var o = st.editId ? find(st.editId) : null;
     if (ev.target.id === 'nModel' && st.kind === 'spa') $('nEquip').innerHTML = equipOpts(ev.target.value, '');
     if (ev.target.id === 'nModel' && st.kind === 'jacuzzi' && o) { var w = $('nWarn'), ch = o.sketch && ev.target.value !== o.model; w.hidden = !ch; w.textContent = ch ? 'שינוי הדגם מוחק את השרטוט הקיים, וצריך לשרטט ולשלוח ללקוח מחדש.' : ''; }
@@ -651,10 +687,13 @@
         shell: val('nShell'), equipLoc: val('nEquipLoc'), delivery: val('nDelivery'), controller: val('nController'), jetColor: val('nJetColor'), lightSides: parseInt(val('nLights'), 10) || 0,
         touch4: on('nTouch4'), ozone: on('nOzone'), uv: on('nUv'),
         jetSup: SPA.jetSuppliers.filter(function (n, k) { return on('nSup' + k); }), acc: SPA.accessories.filter(function (a, k) { return on('nAcc' + k); }).map(function (a) { return a[0]; }) });
-    } else Object.assign(d, { system: val('nSys'), custEmail: val('nEmail'), panel: on('nPanel') });
+    } else Object.assign(d, { system: val('nSys'), custEmail: val('nEmail'), panel: on('nPanel'),
+      tap: val('nTap'), tapFin: val('nTapFin'), pillow: val('nPillow'), pillowColor: val('nPillowColor'), pillowQty: Math.max(1, Math.min(4, parseInt(val('nPillowQty'), 10) || 1)), hatch: val('nHatch'), waste: val('nWaste') });
     return d;
   }
   $('form').addEventListener('click', async function (ev) {
+    var pb = ev.target.closest('.pick button[data-val]');
+    if (pb) { var row = pb.closest('.pick'); $(row.dataset.for).value = pb.dataset.val; row.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === pb); }); return; }
     if (ev.target.id === 'nCancel') { st.form = false; st.editId = null; render(); return; }
     if (ev.target.id !== 'nSave') return;
     var d = formValues(), o = st.editId ? find(st.editId) : null;
