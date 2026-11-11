@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-103453';
+  var APP_VERSION = '20261111-104137';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -381,11 +381,11 @@
           // the customer already approved a drawing with the order (e.g. through the store): skip sending it for approval
           if (kindOf(o) === 'jacuzzi' && IDX[o.stage] <= IDX.approval) {
             var skipBlock = o.sketch && o.sketchBlocking;
-            h += '<button class="btn" type="button" data-skipappr="' + id + '"' + (busy || (skipBlock ? ' disabled' : '')) + '>' + (st.armed['skip' + o.id] ? 'ללחוץ שוב: עוברים להזמנת קיט בלי אישור בקישור' : 'דילוג על אישור הלקוח (יש סקיצה מאושרת בהזמנה)') + '</button>';
+            h += '<button class="btn" type="button" data-skipappr="' + id + '"' + (busy || (skipBlock ? ' disabled' : '')) + '>' + 'דילוג על אישור הלקוח (יש סקיצה מאושרת בהזמנה)' + '</button>';
             if (skipBlock) h += '<div class="who">בשרטוט יש בעיה מסומנת באדום. מתקנים לפני שמדלגים.</div>';
             else if (!o.sketch && drawModel(o)) h += '<div class="who">אין עדיין שרטוט במערכת: אחרי הדילוג רשימת הקיט לא תיגזר משרטוט, ומוסיפים פריטים ידנית.</div>';
           }
-          if (f.s.k === 'inspect') h += '<button class="btn danger" type="button" data-fail="' + id + '"' + busy + '>' + (st.armed['fail' + o.id] ? 'ללחוץ שוב: חוזר לברקן' : 'הבדיקה נכשלה, חוזר לברקן') + '</button>';
+          if (f.s.k === 'inspect') h += '<button class="btn danger" type="button" data-fail="' + id + '"' + busy + '>' + 'הבדיקה נכשלה, חוזר לברקן' + '</button>';
         }
         if (st.holdFor === o.id) {
           h += '<div class="holdbox"><strong>מה מעכב?</strong><div class="row">' + HOLDS.map(function (r) { return '<button class="btn small" type="button" data-hold="' + id + '" data-reason="' + r + '">' + r + '</button>'; }).join('') + '</div>' +
@@ -398,8 +398,8 @@
       return '<li><time>' + fmt(e.at) + '</time><span>' + esc(s.n) + (e.byName ? ' · ' + esc(e.byName) : '') + (e.note ? ' · <span class="note">' + esc(e.note) + '</span>' : '') + '</span></li>';
     }).join('') + '</ul></div>';
     var tools = '';
-    if (isOffice() && (o.history || []).length > 1) tools += '<button class="btn small" type="button" data-undo="' + id + '"' + busy + '>' + (st.armed['undo' + o.id] ? 'ללחוץ שוב כדי לחזור שלב' : 'חזרה שלב אחד') + '</button>';
-    if (isAdmin()) tools += '<button class="btn small danger" type="button" data-del="' + id + '"' + busy + '>' + (st.armed['del' + o.id] ? 'ללחוץ שוב כדי למחוק' : 'מחיקת ההזמנה') + '</button>';
+    if (isOffice() && (o.history || []).length > 1) tools += '<button class="btn small" type="button" data-undo="' + id + '"' + busy + '>' + 'חזרה שלב אחד' + '</button>';
+    if (isAdmin()) tools += '<button class="btn small danger" type="button" data-del="' + id + '"' + busy + '>' + 'מחיקת ההזמנה' + '</button>';
     if (tools) h += '<div class="row">' + tools + '</div>';
     return h + '</div>';
   }
@@ -611,6 +611,23 @@
     }).catch(function () {});
   }
   function custAnswer(o) { var a = st.appr[o.id]; return a && a.token === o.approvalToken && IDX[o.stage] <= IDX.approval ? a : null; }
+  // A small dialog that explains what a button will do, with a final confirm. Escape, the backdrop or "ביטול" cancel.
+  function ask(title, body, okText, danger) {
+    return new Promise(function (resolve) {
+      var box = $('confirmBox'); if (!box) { box = document.createElement('div'); box.id = 'confirmBox'; box.className = 'modal'; document.body.appendChild(box); }
+      box.innerHTML = '<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="cfTitle"><h2 id="cfTitle">' + esc(title) + '</h2><div class="modal-body">' + body + '</div>' +
+        '<div class="row"><button class="btn ' + (danger ? 'danger' : 'primary') + ' big" type="button" data-cf="1">' + esc(okText) + '</button><button class="btn big" type="button" data-cf="0">ביטול</button></div></div>';
+      box.hidden = false;
+      var prev = document.activeElement;
+      function done(v) { box.hidden = true; box.innerHTML = ''; document.removeEventListener('keydown', key); box.onclick = null; if (prev && prev.focus) try { prev.focus(); } catch (e) {} resolve(v); }
+      function key(ev) { if (ev.key === 'Escape') done(false); }
+      document.addEventListener('keydown', key);
+      box.onclick = function (ev) { var b = ev.target.closest('[data-cf]'); if (b) done(b.dataset.cf === '1'); else if (ev.target === box) done(false); };
+      box.querySelector('[data-cf="0"]').focus();
+    });
+  }
+  function orderLine(o) { var ids = [o.tubNum ? 'סידורי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · '); return '<div><strong>' + esc(titleOf(o)) + '</strong>' + (ids ? '<div class="who">' + ids + '</div>' : '') + '</div>'; }
+  function stepLine(from, to) { return '<div class="cf-step"><span>' + esc(from) + '</span><span aria-hidden="true">←</span><strong>' + esc(to) + '</strong></div>'; }
   function arm(key) { if (st.armed[key]) { st.armed[key] = false; return true; } st.armed[key] = true; setTimeout(function () { if (st.armed[key]) { st.armed[key] = false; st.usersDirty = true; render(); } }, 3500); st.usersDirty = true; render(); return false; }
 
   function openSketch(o) {
@@ -659,22 +676,31 @@
     else if (d.edit && (o = find(d.edit))) { st.editId = o.id; st.form = false; st.usersOpen = false; $('form').innerHTML = ''; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     else if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); if (WIDE) $('side').scrollTop = 0; }
     else if (d.sketch && (o = find(d.sketch))) { if (o.sketch || canDraw(o)) openSketch(o); }
-    else if (d.next && (o = find(d.next))) { var nx = nextStage(o); if (nx && canAct(STAGES[IDX[o.stage]])) write(o.id, function () {
-      return move(o, nx.k, null, o.stage === TR.kitStage ? { kitList: kitDraft(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; }) } : null); }); }
+    else if (d.next && (o = find(d.next))) { var nx = nextStage(o), cur = STAGES[IDX[o.stage]]; if (nx && canAct(cur)) (function (o, nx, cur) {
+      var extra = o.stage === TR.kitStage ? '<div class="who">רשימת הקיט תינעל ותעבור למחסן כמו שהיא עכשיו.</div>' : nx.k === 'delivered' ? '<div class="who">ההזמנה תעבור לרשימת "סופקו".</div>' : '';
+      ask(cur.done + '?', orderLine(o) + stepLine(cur.n, nx.n) + '<div class="who">מי ממשיך: ' + esc(nx.who || '—') + '</div>' + extra, 'כן, ' + cur.done).then(function (ok) { if (!ok) return;
+        write(o.id, function () { return move(o, nx.k, null, o.stage === TR.kitStage ? { kitList: kitDraft(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; }) } : null); }); });
+    })(o, nx, cur); }
     else if (d.kitadd && (o = find(d.kitadd))) { var kn = $('kn-' + o.id).value.trim().slice(0, 80), kq = parseInt($('kq-' + o.id).value, 10) || 1, ks = $('ks-' + o.id).value.trim().slice(0, 20); if (!kn) return; document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ kitExtra: (o.kitExtra || []).concat([{ n: kn, q: kq, sku: ks }]) }); }); }
     else if (d.kitdel && (o = find(d.kitdel))) { var ke = (o.kitExtra || []).slice(); ke.splice(+d.i, 1); write(o.id, function () { return col.doc(o.id).update({ kitExtra: ke }); }); }
     else if (d.kitprint && (o = find(d.kitprint))) printKit(o);
     else if (d.skprint && (o = find(d.skprint))) printSketch(o);
-    else if (d.skipappr && (o = find(d.skipappr))) { if (arm('skip' + o.id)) write(o.id, function () { return move(o, 'kitOrder', 'דילוג על אישור הלקוח: סקיצה מאושרת בהזמנה'); }); }
-    else if (d.fail && (o = find(d.fail))) { if (arm('fail' + o.id)) write(o.id, function () { return move(o, 'toBarkan', 'הבדיקה נכשלה, חוזר לברקן'); }); }
+    else if (d.skipappr && (o = find(d.skipappr))) (function (o) { ask('דילוג על אישור הלקוח', orderLine(o) + stepLine(STAGES[IDX[o.stage]].n, STAGES[IDX.kitOrder].n) +
+      '<p>משתמשים בזה רק כשהלקוח כבר אישר סקיצה עם ההזמנה. לא יישלח קישור לאישור, ובהיסטוריה יירשם שהאישור דולג.</p>' + (o.sketch ? '' : '<p class="who">אין שרטוט במערכת: את רשימת הקיט ממלאים ידנית.</p>'), 'כן, לדלג ולעבור להזמנת קיט').then(function (ok) {
+      if (ok) write(o.id, function () { return move(o, 'kitOrder', 'דילוג על אישור הלקוח: סקיצה מאושרת בהזמנה'); }); }); })(o);
+    else if (d.fail && (o = find(d.fail))) (function (o) { ask('הבדיקה נכשלה?', orderLine(o) + stepLine(STAGES[IDX[o.stage]].n, STAGES[IDX.toBarkan].n) + '<p>הג\'קוזי חוזר לברקן לתיקון.</p>', 'כן, להחזיר לברקן', true).then(function (ok) {
+      if (ok) write(o.id, function () { return move(o, 'toBarkan', 'הבדיקה נכשלה, חוזר לברקן'); }); }); })(o);
     else if (d.holdopen) { st.holdFor = d.holdopen; render(); }
     else if (d.hold && (o = find(d.hold))) {
       var reason = d.reason || (($('holdTxt') || {}).value || '').trim(); if (!reason) return;
       st.holdFor = null; write(o.id, function () { return col.doc(o.id).update({ hold: { reason: reason.slice(0, 80), at: new Date().toISOString(), by: me.email } }); });
     }
     else if (d.unhold && (o = find(d.unhold))) write(o.id, function () { return col.doc(o.id).update({ hold: null }); });
-    else if (d.undo && (o = find(d.undo))) { if (arm('undo' + o.id)) { var hs = (o.history || []).slice(0, -1), last = hs[hs.length - 1]; write(o.id, function () { return col.doc(o.id).update({ stage: last.s, stageAt: last.at, history: hs }); }); } }
-    else if (d.del && (o = find(d.del))) { if (arm('del' + o.id)) write(o.id, function () { if (o.approvalToken) apCol.doc(o.approvalToken).delete().catch(function () {}); return col.doc(o.id).delete(); }); }
+    else if (d.undo && (o = find(d.undo))) (function (o) { var hs = (o.history || []).slice(0, -1), last = hs[hs.length - 1]; if (!last) return;
+      ask('חזרה שלב אחד', orderLine(o) + stepLine(STAGES[IDX[o.stage]] ? STAGES[IDX[o.stage]].n : o.stage, (STAGES[IDX[last.s]] || { n: last.s }).n) + '<p>העדכון האחרון בהיסטוריה יימחק.</p>', 'כן, לחזור שלב').then(function (ok) {
+      if (ok) write(o.id, function () { return col.doc(o.id).update({ stage: last.s, stageAt: last.at, history: hs }); }); }); })(o);
+    else if (d.del && (o = find(d.del))) (function (o) { ask('מחיקת ההזמנה', orderLine(o) + '<p>ההזמנה, השרטוט וההיסטוריה שלה יימחקו לגמרי. אי אפשר לשחזר.</p>', 'כן, למחוק לצמיתות', true).then(function (ok) {
+      if (ok) { if (st.openId === o.id) st.openId = null; write(o.id, function () { if (o.approvalToken) apCol.doc(o.approvalToken).delete().catch(function () {}); return col.doc(o.id).delete(); }); } }); })(o);
   }
   $('tiles').addEventListener('click', function (ev) { var b = ev.target.closest('[data-loc]'); if (!b) return; st.loc = st.loc === b.dataset.loc ? '' : b.dataset.loc; st.stageF = ''; st.tab = 'open'; render(); });
   $('tabs').addEventListener('click', function (ev) {
