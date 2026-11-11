@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-132854';
+  var APP_VERSION = '20261111-133350';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -75,8 +75,9 @@
   };
   function tapImg(code, fin) { return 'img/addons/' + code + '-' + (fin || 'nickel') + '.jpg'; }
   // the add-on lines of a home jacuzzi order, for the card, the kit and the fitter's sheet
-  function addonLines(o) {
-    var out = [], t = pick(ADD.taps, o.tap), pl = pick(ADD.pillows, o.pillow);
+  // the pillow is not a kit part (it goes straight to the fitter); pass noPillow for the kit
+  function addonLines(o, noPillow) {
+    var out = [], t = pick(ADD.taps, o.tap), pl = noPillow ? '' : pick(ADD.pillows, o.pillow);
     if (t) out.push({ n: 'סט ברזים ' + o.tap + ' ' + t + ' · ' + (pick(ADD.tapFin, o.tapFin) || 'ניקל'), q: 1, sku: '' });
     if (pl) out.push({ n: 'כרית ראש ' + o.pillow + ' ' + pl + (o.pillowColor ? ' · ' + pick(ADD.pillowColors, o.pillowColor) : ''), q: o.pillowQty || 1, sku: '' });
     return out;
@@ -537,7 +538,7 @@
   // office added by hand; at hand-over it is frozen into o.kitList, where the warehouse ticks each line.
   // the spa kit for now: the equipment level by its item number, plus the options that were ordered (exact lists to follow)
   function kitBase(o) {
-    if (kindOf(o) !== 'spa') return Sketch.kitOf(o.sketch).concat(addonLines(o));
+    if (kindOf(o) !== 'spa') return Sketch.kitOf(o.sketch).concat(addonLines(o, true));
     var m = SPA_MODEL[o.model], out = [], c = pick(SPA.controllers, o.controller);
     if (m) out.push({ n: 'איבזור ' + (o.equipName || '') + ' · ' + m.name, q: 1, sku: o.equip || '' });
     if (c) out.push({ n: 'בקר ' + c, q: 1, sku: '' });

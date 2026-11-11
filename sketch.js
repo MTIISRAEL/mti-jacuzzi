@@ -17,6 +17,8 @@ window.Sketch = (function () {
     light:   { name: 'פנס תאורה', r: 2.6, tag: 'פנס' },
     reg:     { name: 'וסת אוויר', r: 1.9, tag: 'וסת', max: 2 },
     btn:     { name: 'כפתור הפעלה', r: 2.1, tag: 'כפתור', max: 2 },
+    // head pillow with brackets: 30×9 cm, fixed with 2 drill holes; drawn for the fitter, not a kit part
+    pillow:  { name: 'כרית ראש', r: 15, w: 30, h: 9, tag: 'כרית', max: 4 },
     // spa parts (sizes in cm, colours as in the older spa system); w/h make a panel rectangle instead of a circle
     s_j2:    { name: 'ג\'ט 2"', r: 2.5, c: '#facc15', spa: 1 },
     s_j3:    { name: 'ג\'ט 3"', r: 3.8, c: '#84cc16', spa: 1 },
@@ -147,6 +149,9 @@ window.Sketch = (function () {
         return '<circle r="' + ST.r + '" fill="' + ST.c + '" stroke="#fff" stroke-width="' + (ST.r > 3 ? .6 : .35) + '"/><circle r="' + (ST.r * 0.35) + '" fill="rgba(255,255,255,.55)"/>';
       }
       if (t === 'light') return '<circle r="2.6" fill="#fff6cf" stroke="#b8860b" stroke-width=".6"/><circle r="1.1" fill="#f2b705"/><path d="M0 -2.1V-1.5M0 2.1V1.5M-2.1 0H-1.5M2.1 0H1.5" stroke="#b8860b" stroke-width=".4"/>' + tag;
+      if (t === 'pillow') return '<rect x="-15" y="-4.5" width="30" height="9" rx="4" fill="#4a4e55" stroke="#22252a" stroke-width=".5"/>' +
+        '<circle cx="-10" r="1.5" fill="#fff" stroke="#d62828" stroke-width=".6"/><circle cx="10" r="1.5" fill="#fff" stroke="#d62828" stroke-width=".6"/>' +
+        '<path d="M-11 0h2M-10 -1v2M9 0h2M10 -1v2" stroke="#d62828" stroke-width=".35"/>' + (small ? '' : '<text class="t-lbl" style="font-size:3.2px" text-anchor="middle" y="1.1" fill="#fff">כרית</text>');
       if (t === 'btn') return '<circle r="2.1" fill="#c9c5c2" stroke="#7d7672" stroke-width=".5"/><circle r=".8" fill="#7d7672"/>' + tag;
       if (t === 'reg') return '<circle r="1.9" fill="#d4d0cd" stroke="#7d7672" stroke-width=".5"/><path d="M0 -1.2V1.2" stroke="#7d7672" stroke-width=".5"/>' + tag;
       if (t === 'ctrl') return '<circle r="2.1" fill="#c9c5c2" stroke="#7d7672" stroke-width=".5"/><circle r=".8" fill="#7d7672"/>';
@@ -160,7 +165,7 @@ window.Sketch = (function () {
       return '';
     }
     function tf(it) {
-      var rot = it.type === 'service' && (it.side === 'left' || it.side === 'right') ? ' rotate(90)' : '';
+      var rot = (it.type === 'service' && (it.side === 'left' || it.side === 'right')) || (it.type === 'pillow' && it.rot) ? ' rotate(90)' : '';
       return 'translate(' + it.x.toFixed(1) + ' ' + it.y.toFixed(1) + ')' + rot;
     }
     function ringFor(it) {
@@ -168,6 +173,8 @@ window.Sketch = (function () {
       if (it.type === 'service') {
         if (st) out += '<rect x="-21.3" y="-3.5" width="42.6" height="7" rx="2" fill="none" stroke="' + statusColor(st) + '" stroke-width="1"/>';
         if (sel) out += '<rect x="-23" y="-5.2" width="46" height="10.4" rx="3" fill="none" stroke="#d62828" stroke-width=".7" stroke-dasharray="1.6 1.2"/>';
+      } else if (it.type === 'pillow') {
+        if (sel) out += '<rect x="-17" y="-6.5" width="34" height="13" rx="5" fill="none" stroke="#0b6e7c" stroke-width=".7" stroke-dasharray="1.6 1.2"/>';
       } else if (it.type === 'motor') {
         if (st) out += '<rect x="-12.3" y="-8.8" width="24.6" height="17.6" rx="3.4" fill="none" stroke="' + statusColor(st) + '" stroke-width="1"/>';
         if (sel) out += '<rect x="-14" y="-10.5" width="28" height="21" rx="4.5" fill="none" stroke="#0b6e7c" stroke-width=".7" stroke-dasharray="1.6 1.2"/>';
@@ -180,6 +187,7 @@ window.Sketch = (function () {
     function hit(it) {
       if (it.type === 'service') return '<rect x="-22" y="-7" width="44" height="14" fill="transparent"/>';
       if (it.type === 'motor') return '<rect x="-12" y="-9" width="24" height="18" fill="transparent"/>';
+      if (it.type === 'pillow') return '<rect x="-16" y="-6" width="32" height="12" fill="transparent"/>';
       return '<circle r="6.5" fill="transparent"/>';
     }
     function wallSvg() {
@@ -243,9 +251,11 @@ window.Sketch = (function () {
       if (!it) { box.hidden = true; box.innerHTML = ''; return; }
       var st = status(it), stTxt = '';
       box.hidden = false;
+      if (it.type === 'pillow') stTxt = ' · עם תושבות, 2 חורי קידוח במרחק 20 ' + CM;
       box.innerHTML = '<div><strong>' + nameOf(it) + '</strong>' + stTxt + '</div>' + (readOnly ? '' :
         '<div class="row"><div class="nudge" aria-label="הזזה עדינה"><button class="btn" type="button" data-n="-1,0" aria-label="שמאלה">←</button><button class="btn" type="button" data-n="0,-1" aria-label="למעלה">↑</button>' +
         '<button class="btn" type="button" data-n="0,1" aria-label="למטה">↓</button><button class="btn" type="button" data-n="1,0" aria-label="ימינה">→</button></div>' +
+        (it.type === 'pillow' ? '<button class="btn" type="button" data-act="rot">סיבוב 90°</button>' : '') +
         (it.type === 'jet' ? '<button class="btn" type="button" data-act="size">החלף ל-' + (jsize(it) === 2 ? 3 : 2) + '"</button>' : '') +
         (st === 'moved' ? '<button class="btn" type="button" data-act="back">החזר למקום</button>' : '') + '<button class="btn danger" type="button" data-act="del">הסר</button></div>');
     }
@@ -304,9 +314,9 @@ window.Sketch = (function () {
       $('skPalWrap').hidden = readOnly;
       var nj = S.items.filter(function (i) { return i.type === 'jet' || /^s_j/.test(i.type); }).length;
       $('skPalWrap').querySelector('h2').textContent = 'הוספת פריט' + (jetsStd ? " · ג'טים: " + nj + ' מתוך ' + jetsStd : " · ג'טים: " + nj);
-      $('skPal').innerHTML = (SPA ? Object.keys(TYPES).filter(function (k) { return TYPES[k].spa; }).map(function (k) { return [k]; }) : [['jet', 2], ['jet', 3], ['light'], ['faucet'], ['shower'], ['service'], ['reg'], ['btn']]).map(function (p) {
+      $('skPal').innerHTML = (SPA ? Object.keys(TYPES).filter(function (k) { return TYPES[k].spa; }).map(function (k) { return [k]; }) : [['jet', 2], ['jet', 3], ['light'], ['pillow'], ['faucet'], ['shower'], ['service'], ['reg'], ['btn']]).map(function (p) {
         var t = p[0], demo = { type: t, size: p[1] }, have = S.items.filter(function (i) { return i.type === t; }).length, full = have >= (t === 'light' ? 1 : TYPES[t].max || 99);
-        var vb = t === 'service' ? '-22 -8 44 16' : t === 'motor' ? '-13 -10 26 20' : TYPES[t].spa ? (TYPES[t].w ? (-TYPES[t].w / 2 - 1) + ' ' + (-TYPES[t].w / 2 - 1) + ' ' + (TYPES[t].w + 2) + ' ' + (TYPES[t].w + 2) : (-TYPES[t].r - 1) + ' ' + (-TYPES[t].r - 1) + ' ' + (2 * TYPES[t].r + 2) + ' ' + (2 * TYPES[t].r + 2)) : '-5 -5 10 10';
+        var vb = t === 'service' ? '-22 -8 44 16' : t === 'pillow' ? '-16 -16 32 32' : t === 'motor' ? '-13 -10 26 20' : TYPES[t].spa ? (TYPES[t].w ? (-TYPES[t].w / 2 - 1) + ' ' + (-TYPES[t].w / 2 - 1) + ' ' + (TYPES[t].w + 2) + ' ' + (TYPES[t].w + 2) : (-TYPES[t].r - 1) + ' ' + (-TYPES[t].r - 1) + ' ' + (2 * TYPES[t].r + 2) + ' ' + (2 * TYPES[t].r + 2)) : '-5 -5 10 10';
         return '<button class="btn" type="button" data-add="' + t + '"' + (p[1] ? ' data-size="' + p[1] + '"' : '') + (full ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol(demo, true) + '</svg><span>' + nameOf(demo) + '</span></button>'; }).join('');
       $('skHint').textContent = readOnly ? (opt.readOnlyNote || 'תצוגה בלבד.') : 'גוררים פריט כדי להזיז. לוחצים על צד של האמבטיה כדי להוסיף או להסיר קיר. במקלדת: Delete מוחק את הפריט המסומן, והחצים מזיזים אותו.';
       var note = $('skNote'); note.hidden = !!(tpl && tpl[system]) || readOnly || SPA;
@@ -328,6 +338,7 @@ window.Sketch = (function () {
         if (best === 'top' || best === 'bottom') { it.x = clamp(x, half, W - half); it.y = best === 'top' ? 0 : H; }
         else { it.y = clamp(y, half, H - half); it.x = best === 'left' ? 0 : W; }
       } else if (it.type === 'motor') { it.x = clamp(x, 11, W - 11); it.y = clamp(y, 7.5, H - 7.5); }
+      else if (it.type === 'pillow') { var hx = it.rot ? 4.5 : 15, hy = it.rot ? 15 : 4.5; it.x = clamp(x, hx, W - hx); it.y = clamp(y, hy, H - hy); }
       else { var r = TYPES[it.type].r; it.x = clamp(x, r, W - r); it.y = clamp(y, r, H - r); }
     }
     function pt(ev) { var p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; var m = svg.getScreenCTM(); return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 }; }
@@ -373,6 +384,7 @@ window.Sketch = (function () {
       var b = ev.target.closest('button'), it = find(selId); if (!b || !it || readOnly) return;
       if (b.dataset.n) { var d = b.dataset.n.split(','); place(it, it.x + (+d[0]), it.y + (+d[1])); }
       else if (b.dataset.act === 'size') { it.size = jsize(it) === 2 ? 3 : 2; }
+      else if (b.dataset.act === 'rot') { it.rot = it.rot ? 0 : 90; place(it, it.x, it.y); }
       else if (b.dataset.act === 'back') { it.x = it.std.x; it.y = it.std.y; if (it.std.side) it.side = it.std.side; if (it.std.size) it.size = it.std.size; }
       else if (b.dataset.act === 'del') removeItem(it);
       touch();
@@ -387,6 +399,7 @@ window.Sketch = (function () {
       else if (t === 'service') { var o = ['bottom', 'left', 'right', 'top'].filter(function (k) { return !S.walls[k]; })[0] || 'bottom', at = { bottom: [W / 2, H], top: [W / 2, 0], left: [0, H / 2], right: [W, H / 2] }[o]; place(it, at[0], at[1]); }
       else if (t === 'motor') place(it, 22, H - 22);
       else if (t === 'light') place(it, W / 2, H * 0.3);
+      else if (t === 'pillow') place(it, W * 0.3 + n * 36, 10);
       else if (TYPES[t].spa) { var na = S.items.filter(function (i) { return !i.std; }).length; place(it, W * 0.2 + (na % 8) * W * 0.08, TYPES[t].w ? 8 : H * 0.4 + Math.floor(na / 8) % 4 * 14); } // spread new parts so they do not land on each other
       else if (t === 'reg' || t === 'btn') place(it, W * (t === 'reg' ? 0.14 : 0.36) + n * 13, 3.6);
       else place(it, W * 0.4 + (n % 6) * 8, H / 2);
