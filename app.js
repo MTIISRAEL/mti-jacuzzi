@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-070909';
+  var APP_VERSION = '20261111-071257';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -251,20 +251,7 @@
     if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר סידורי</label><input id="tn-' + id + '" inputmode="numeric" maxlength="4" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
     if (MODEL[o.model]) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
     if (MODEL[o.model] && o.sketch && me.role !== 'agent') h += '<button class="btn" type="button" data-skprint="' + id + '">הדפסת סקיצה למאבזר</button>';
-    if (isOffice() && o.approvalToken && o.sketch && !o.sketchBlocking && IDX[o.stage] <= IDX.approval) {
-      var ph = intlPhone(o.phone), txt = encodeURIComponent(custMessage(o)), ca = custAnswer(o);
-      h += '<div class="sendbox"><strong>שליחת השרטוט ללקוח לאישור</strong>' +
-        (ca && ca.status === 'changes' ? '<div class="st chg">הלקוח ביקש שינוי (' + fmt(ca.answeredAt) + '): ' + esc(ca.comment) + '<br>אחרי תיקון ושמירת השרטוט שולחים שוב.</div>'
-          : o.approvalSentAt ? '<div class="st">נשלח ב-' + fmt(o.approvalSentAt) + '. ממתין לתשובת הלקוח.</div>' : '') +
-        '<div class="row"><input id="ph-' + id + '" inputmode="tel" dir="ltr" placeholder="טלפון הלקוח" aria-label="טלפון הלקוח" value="' + esc(o.phone || '') + '">' +
-        '<input id="em-' + id + '" type="email" dir="ltr" placeholder="מייל הלקוח" aria-label="מייל הלקוח" value="' + esc(o.custEmail || '') + '">' +
-        '<button class="btn small" type="button" data-savecontact="' + id + '">שמור</button></div><div class="row">' +
-        (ph ? '<a class="btn small primary" target="_blank" rel="noopener" data-send="' + id + '" data-ch="WhatsApp" href="https://wa.me/' + ph + '?text=' + txt + '">WhatsApp</a>' +
-              '<a class="btn small" data-send="' + id + '" data-ch="SMS" href="sms:+' + ph + '?body=' + txt + '">SMS</a>' : '') +
-        (o.custEmail ? '<a class="btn small" data-send="' + id + '" data-ch="אימייל" href="mailto:' + esc(o.custEmail) + '?subject=' + encodeURIComponent('MTI · אישור סקיצה לג\'קוזי') + '&body=' + txt + '">אימייל</a>' : '') +
-        '<button class="btn small" type="button" data-copy="' + id + '">העתקת קישור</button></div>' +
-        (!ph && !o.custEmail ? '<div class="st">כדי לשלוח, מוסיפים טלפון או מייל של הלקוח ושומרים. אפשר גם להעתיק את הקישור ולשלוח ידנית.</div>' : '') + '</div>';
-    }
+    h += sendBox(o, '');
     if (f.unknown) return h + '<div class="issue warn">המסך הזה פועל בגרסה ישנה ולא מכיר את השלב של ההזמנה. <button class="btn small" type="button" data-reload="1">רענון</button></div></div>';
     if (!del) h += kitHtml(o, f);
     if (!del && canWrite()) {
@@ -335,15 +322,39 @@
       '<div class="row"><button class="btn primary" type="button" id="uAdd">הוספת משתמש</button><button class="btn" type="button" id="uClose">סגירה</button><span id="uErr" style="color:var(--bad)"></span></div>';
   }
   var pending = false;
+  // The box that sends the drawing to the customer for approval. pfx keeps its field ids apart when it also shows in the drawing screen.
+  function sendBox(o, pfx) {
+    if (!(o && isOffice() && o.approvalToken && o.sketch && !o.sketchBlocking && IDX[o.stage] <= IDX.approval)) return '';
+    var id = esc(o.id);
+      var ph = intlPhone(o.phone), txt = encodeURIComponent(custMessage(o)), ca = custAnswer(o);
+      return '<div class="sendbox"><strong>שליחת השרטוט ללקוח לאישור</strong>' +
+        (ca && ca.status === 'changes' ? '<div class="st chg">הלקוח ביקש שינוי (' + fmt(ca.answeredAt) + '): ' + esc(ca.comment) + '<br>אחרי תיקון ושמירת השרטוט שולחים שוב.</div>'
+          : o.approvalSentAt ? '<div class="st">נשלח ב-' + fmt(o.approvalSentAt) + '. ממתין לתשובת הלקוח.</div>' : '') +
+        '<div class="row"><input id="' + pfx + 'ph-' + id + '" inputmode="tel" dir="ltr" placeholder="טלפון הלקוח" aria-label="טלפון הלקוח" value="' + esc(o.phone || '') + '">' +
+        '<input id="' + pfx + 'em-' + id + '" type="email" dir="ltr" placeholder="מייל הלקוח" aria-label="מייל הלקוח" value="' + esc(o.custEmail || '') + '">' +
+        '<button class="btn small" type="button" data-savecontact="' + id + '" data-pfx="' + pfx + '">שמור</button></div><div class="row">' +
+        (ph ? '<a class="btn small primary" target="_blank" rel="noopener" data-send="' + id + '" data-ch="WhatsApp" href="https://wa.me/' + ph + '?text=' + txt + '">WhatsApp</a>' +
+              '<a class="btn small" data-send="' + id + '" data-ch="SMS" href="sms:+' + ph + '?body=' + txt + '">SMS</a>' : '') +
+        (o.custEmail ? '<a class="btn small" data-send="' + id + '" data-ch="אימייל" href="mailto:' + esc(o.custEmail) + '?subject=' + encodeURIComponent('MTI · אישור סקיצה לג\'קוזי') + '&body=' + txt + '">אימייל</a>' : '') +
+        '<button class="btn small" type="button" data-copy="' + id + '">העתקת קישור</button></div>' +
+        (!ph && !o.custEmail ? '<div class="st">כדי לשלוח, מוסיפים טלפון או מייל של הלקוח ושומרים. אפשר גם להעתיק את הקישור ולשלוח ידנית.</div>' : '') + '</div>';
+  }
+  // while the drawing screen is open, its send box follows the saved order
+  function refreshSketchSend() {
+    var box = st.sketchId && $('sketchView').querySelector('#skExtra'); if (!box) return;
+    var a = document.activeElement; if (a && box.contains(a) && a.tagName === 'INPUT') { pending = true; return; }
+    box.innerHTML = sendBox(find(st.sketchId), 'sk-');
+    if (st.scrollSend && box.innerHTML) { st.scrollSend = false; setTimeout(function () { if (box.scrollIntoView) box.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 50); }
+  }
   function render() {
     if (!me) return;
     var a = document.activeElement;
-    if (a && ($('list').contains(a) || $('usersPanel').contains(a)) && (a.tagName === 'INPUT')) { pending = true; return; }
+    if (a && ($('list').contains(a) || $('usersPanel').contains(a) || ($('sketchView').querySelector('#skExtra') || $('list')).contains(a)) && (a.tagName === 'INPUT')) { pending = true; return; }
     pending = false;
     var now = new Date();
     $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin();
     $('banner').hidden = me.role !== 'agent'; if (me.role === 'agent') $('banner').textContent = 'תצוגה בלבד: כאן רואים איפה כל ג\'קוזי של הלקוחות שלך ומתי הוא צפוי לרדת.';
-    renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderList(now);
+    renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderList(now); refreshSketchSend();
     $('foot').textContent = st.loaded ? 'ימי עבודה: א\'–ה\'. חריגה מסומנת כשהזמנה נשארת בשלב יותר מהזמן שהוקצב לו.' : '';
   }
   document.addEventListener('focusout', function () { if (pending) setTimeout(render, 0); });
@@ -424,7 +435,9 @@
   function openSketch(o) {
     var model = MODEL[o.model]; if (!model) return;
     var edit = canDraw(o);
+    st.sketchId = o.id;
     Sketch.open($('sketchView'), {
+      onClose: function () { st.sketchId = null; },
       model: model, system: o.system, data: o.sketch || null, readOnly: !edit || (!o.sketch && !edit),
       title: titleOf(o) + (o.num ? ' · הזמנה ' + o.num : ''),
       readOnlyNote: IDX[o.stage] > IDX.approval ? 'השרטוט אושר על ידי הלקוח ונעול לעריכה.' : 'תצוגה בלבד.',
@@ -433,12 +446,16 @@
         b.update(col.doc(o.id), { sketch: data, sketchBlocking: !!meta.blocking, sketchAt: at, approvalToken: token, approvalSentAt: null });
         b.set(apCol.doc(token), { orderId: o.id, customer: o.customer || '', num: o.num || '', model: o.model, system: o.system || '', sketch: data, status: meta.blocking ? 'draft' : 'pending', updatedAt: at });
         o.approvalToken = token;
+        if (!meta.blocking) st.scrollSend = true; // bring the send box into view once it appears
         return b.commit();
       }
     });
+    refreshSketchSend();
   }
 
-  $('list').addEventListener('click', function (ev) {
+  $('sketchView').addEventListener('click', function (ev) { if (ev.target.closest('#skExtra')) onAct(ev); });
+  $('list').addEventListener('click', onAct);
+  function onAct(ev) {
     var a = ev.target.closest('a[data-send]'), o;
     if (a && (o = find(a.dataset.send))) { // the link itself opens WhatsApp / SMS / mail; here we only record that it was sent
       var upd = { approvalSentAt: new Date().toISOString(), approvalVia: a.dataset.ch };
@@ -449,7 +466,7 @@
     var b = ev.target.closest('button'); if (!b || b.disabled) return; var d = b.dataset;
     if (d.reload) { hardReload(); return; }
     if (d.savetub && (o = find(d.savetub))) { var tv = $('tn-' + o.id).value.trim(); if (!/^\d{4}$/.test(tv)) { $('banner').hidden = false; $('banner').textContent = 'מספר סידורי הוא 4 ספרות.'; return; } document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ tubNum: tv }); }); }
-    else if (d.savecontact && (o = find(d.savecontact))) { var pv = $('ph-' + o.id).value.trim(), em = $('em-' + o.id).value.trim(); document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ phone: pv, custEmail: em }); }); }
+    else if (d.savecontact && (o = find(d.savecontact))) { var P = d.pfx || '', pv = $(P + 'ph-' + o.id).value.trim(), em = $(P + 'em-' + o.id).value.trim(); document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ phone: pv, custEmail: em }); }); }
     else if (d.copy && (o = find(d.copy))) { var link = custLink(o); (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () { b.textContent = 'הקישור הועתק'; }, function () { b.outerHTML = '<input readonly dir="ltr" value="' + esc(link) + '" onfocus="this.select()">'; }); }
     else if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); }
     else if (d.sketch && (o = find(d.sketch))) { if (o.sketch || canDraw(o)) openSketch(o); }
@@ -468,7 +485,7 @@
     else if (d.unhold && (o = find(d.unhold))) write(o.id, function () { return col.doc(o.id).update({ hold: null }); });
     else if (d.undo && (o = find(d.undo))) { if (arm('undo' + o.id)) { var hs = (o.history || []).slice(0, -1), last = hs[hs.length - 1]; write(o.id, function () { return col.doc(o.id).update({ stage: last.s, stageAt: last.at, history: hs }); }); } }
     else if (d.del && (o = find(d.del))) { if (arm('del' + o.id)) write(o.id, function () { if (o.approvalToken) apCol.doc(o.approvalToken).delete().catch(function () {}); return col.doc(o.id).delete(); }); }
-  });
+  }
   $('tiles').addEventListener('click', function (ev) { var b = ev.target.closest('[data-loc]'); if (!b) return; st.loc = st.loc === b.dataset.loc ? '' : b.dataset.loc; st.tab = 'open'; render(); });
   $('tabs').addEventListener('click', function (ev) {
     var b = ev.target.closest('button'); if (!b) return;

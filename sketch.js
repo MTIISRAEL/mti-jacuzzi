@@ -95,6 +95,7 @@ window.Sketch = (function () {
       '<div class="panel"><h2>קיט אביזרים לפי השרטוט</h2><table class="kit" id="skKit"></table></div>' +
       '<div class="panel"><label class="f wide" for="skNotes">הערות למאבזר בברקן<textarea id="skNotes" rows="2"></textarea></label></div>' +
       '<div class="row"><button class="btn primary big" type="button" id="skSave2" hidden>שמירת השרטוט</button></div>' +
+      '<div id="skExtra"></div>' + // filled by the app: sending the saved drawing to the customer
       '<div class="row"><button class="btn danger" id="skReset" type="button">איפוס לסטנדרט</button></div>' +
       '</div>';
     function $(id) { return host.querySelector('#' + id); }
@@ -283,6 +284,7 @@ window.Sketch = (function () {
       note.textContent = "לדגם הזה עדיין אין תבנית ג'טים סטנדרטית, אז מסמנים את הג'טים ידנית. מיקום פתח השירות הוא נקודת התחלה בלבד.";
       $('skSave').hidden = readOnly; $('skSave').disabled = saving || !dirty; $('skSave').textContent = saving ? 'שומר…' : dirty ? 'שמירת השרטוט' : 'נשמר';
       syncSave2();
+      $('skExtra').hidden = readOnly || dirty || saving || !!opt.customer;
       $('skReset').hidden = readOnly; $('skReset').textContent = armed.reset ? 'ללחוץ שוב כדי לאפס' : 'איפוס לסטנדרט';
       $('skClose').textContent = armed.close ? 'לצאת בלי לשמור?' : 'חזרה ללוח';
       $('skNotes').disabled = readOnly;
