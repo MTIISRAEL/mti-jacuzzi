@@ -48,7 +48,8 @@ h2 { font-family: var(--display); font-size: 15px; font-weight: 500; margin: 0; 
 .tile .l { font-size: 13px; color: var(--muted); }
 .tile .late { font-size: 12.5px; font-weight: 500; color: var(--bad); min-height: 18px; }
 
-.filters { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.filters { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+@media (max-width: 560px) { .filters { grid-template-columns: 1fr 1fr; } .filters input { grid-column: 1 / -1; } .filters select { max-width: none; width: 100%; } }
 .filters input, .filters select, .form input, .form select, .form textarea, .holdbox input { font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 11px; min-height: 44px; box-sizing: border-box; width: 100%; min-width: 0; }
 .filters select { width: auto; max-width: 42vw; }
 

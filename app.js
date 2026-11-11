@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-094146';
+  var APP_VERSION = '20261111-094623';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -122,7 +122,7 @@
   document.querySelector('.kinds').addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-kind]'); if (!b || b.dataset.kind === st.kind) return;
     st.kind = b.dataset.kind; try { localStorage.setItem('mtiKind', st.kind); } catch (e) {}
-    st.form = false; st.editId = null; st.openId = null; st.loc = ''; st.tab = 'open'; $('form').innerHTML = '';
+    st.form = false; st.editId = null; st.openId = null; st.loc = ''; st.stageF = ''; st.tab = 'open'; $('form').innerHTML = '';
     applyKind(); render();
   });
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -277,6 +277,7 @@
       if (st.tab === 'open' ? del : !del) return false;
       if (st.loc && locOf(STAGES[IDX[o.stage] || 0], o) !== st.loc) return false;
       if (st.agent && (o.agent || '') !== st.agent) return false;
+      if (st.stageF && o.stage !== st.stageF) return false;
       if (q && [o.customer, o.num, o.tubNum, o.model, o.agent, o.store].join(' ').toLowerCase().indexOf(q) < 0) return false;
       return true;
     }).map(function (o) { return { o: o, f: info(o, now) }; }).sort(function (a, b) {
@@ -294,6 +295,14 @@
   }
   function renderFilters() {
     var agents = {}; st.orders.forEach(function (o) { if (o.agent) agents[o.agent] = 1; });
+    // stage filter: every stage with how many open orders stand in it, grouped by where the tub is
+    var stSel = $('stageSel'), open = st.orders.filter(function (o) { return o.stage !== 'delivered'; }), cnt = {};
+    open.forEach(function (o) { cnt[o.stage] = (cnt[o.stage] || 0) + 1; });
+    if (st.stageF && !IDX.hasOwnProperty(st.stageF)) st.stageF = '';
+    stSel.innerHTML = '<option value="">כל השלבים (' + open.length + ')</option>' + LOCS.map(function (L) {
+      return '<optgroup label="' + esc(L.n) + '">' + STAGES.filter(function (x) { return x.loc === L.k; }).map(function (x) { return '<option value="' + x.k + '">' + esc(x.n) + ' (' + (cnt[x.k] || 0) + ')</option>'; }).join('') + '</optgroup>';
+    }).join('');
+    stSel.value = st.stageF;
     var sel = $('agentSel'), keys = Object.keys(agents).sort();
     sel.hidden = me.role === 'agent' || !keys.length;
     sel.innerHTML = '<option value="">כל הסוכנים</option>' + keys.map(function (a) { return '<option value="' + esc(a) + '">' + esc(a) + '</option>'; }).join('');
@@ -302,7 +311,7 @@
     $('tabs').innerHTML =
       '<button class="btn small' + (st.tab === 'open' ? ' primary' : '') + '" type="button" data-tab="open">פתוחות (' + (st.orders.length - nDel) + ')</button>' +
       '<button class="btn small' + (st.tab === 'done' ? ' primary' : '') + '" type="button" data-tab="done">סופקו (' + nDel + ')</button>' +
-      (st.loc ? '<button class="btn small" type="button" data-loc-clear="1">הצג את כל המקומות</button>' : '');
+      (st.loc || st.stageF ? '<button class="btn small" type="button" data-loc-clear="1">הצג הכול</button>' : '');
   }
   // where the tub is at a stage: a1 still in Ashdod, bk in Barkan, a2 back in Ashdod; a truck ride counts as its destination
   function phaseOf(k, o) { var j = IDX[k], s = STAGES[j]; while (s && s.loc === 'road' && STAGES[j + 1]) s = STAGES[++j]; return s ? locOf(s, o) : 'a1'; }
@@ -658,14 +667,15 @@
     else if (d.undo && (o = find(d.undo))) { if (arm('undo' + o.id)) { var hs = (o.history || []).slice(0, -1), last = hs[hs.length - 1]; write(o.id, function () { return col.doc(o.id).update({ stage: last.s, stageAt: last.at, history: hs }); }); } }
     else if (d.del && (o = find(d.del))) { if (arm('del' + o.id)) write(o.id, function () { if (o.approvalToken) apCol.doc(o.approvalToken).delete().catch(function () {}); return col.doc(o.id).delete(); }); }
   }
-  $('tiles').addEventListener('click', function (ev) { var b = ev.target.closest('[data-loc]'); if (!b) return; st.loc = st.loc === b.dataset.loc ? '' : b.dataset.loc; st.tab = 'open'; render(); });
+  $('tiles').addEventListener('click', function (ev) { var b = ev.target.closest('[data-loc]'); if (!b) return; st.loc = st.loc === b.dataset.loc ? '' : b.dataset.loc; st.stageF = ''; st.tab = 'open'; render(); });
   $('tabs').addEventListener('click', function (ev) {
     var b = ev.target.closest('button'); if (!b) return;
-    if (b.dataset.tab) { st.tab = b.dataset.tab; if (st.tab === 'done') st.loc = ''; } else if (b.dataset.locClear) st.loc = '';
+    if (b.dataset.tab) { st.tab = b.dataset.tab; if (st.tab === 'done') st.loc = ''; } else if (b.dataset.locClear) { st.loc = ''; st.stageF = ''; }
     render();
   });
   $('q').addEventListener('input', function () { st.q = this.value; renderList(new Date()); });
   $('agentSel').addEventListener('change', function () { st.agent = this.value; render(); });
+  $('stageSel').addEventListener('change', function () { st.stageF = this.value; if (st.stageF) { st.tab = 'open'; st.loc = ''; } render(); });
   $('newBtn').addEventListener('click', function () { st.form = !st.form || !!st.editId; st.editId = null; st.usersOpen = false; $('form').innerHTML = ''; render(); if (st.form) $('nCust').focus(); });
   $('usersBtn').addEventListener('click', function () { st.usersOpen = !st.usersOpen; st.form = false; st.usersDirty = true; render(); });
   $('form').addEventListener('change', function (ev) {
