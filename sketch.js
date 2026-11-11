@@ -290,8 +290,10 @@ window.Sketch = (function () {
       $('skSide').hidden = !model.sides || !!opt.customer;
       if (model.sides) $('skSide').innerHTML = '<span>כיוון האמבטיה:</span>' + [['R', 'ימין'], ['L', 'שמאל']].map(function (f) {
         return '<button class="btn' + (S.side === f[0] ? ' primary' : '') + '" type="button" data-side="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('') + (S.side ? '' : '<span class="who">צריך לבחור</span>');
-      $('skFinish').innerHTML = '<span>' + "גימור ג'טים:" + '</span>' + [['grey', 'גרפיט · סטנדרט'], ['white', 'לבן · שדרוג']].map(function (f) {
-        return '<button class="btn' + (S.finish === f[0] ? ' primary' : '') + '" type="button" data-finish="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('') +
+      // white jets come only in the BALBOA series; PRIME (CMP) is nickel only
+      var prime = S.series === 'prime';
+      $('skFinish').innerHTML = '<span>' + "גימור ג'טים:" + '</span>' + (prime ? [['grey', 'ניקל · CMP']] : [['grey', 'גרפיט · סטנדרט'], ['white', 'לבן · שדרוג']]).map(function (f) {
+        return '<button class="btn' + (S.finish === f[0] || prime ? ' primary' : '') + '" type="button" data-finish="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('') +
         '<span>' + "סדרת ג'טים:" + '</span>' + [['balboa', 'BALBOA · סטנדרט'], ['prime', 'PRIME (CMP)']].map(function (f) {
         return '<button class="btn' + ((S.series === 'prime' ? 'prime' : 'balboa') === f[0] ? ' primary' : '') + '" type="button" data-series="' + f[0] + '"' + (readOnly ? ' disabled' : '') + '>' + f[1] + '</button>'; }).join('');
       var hasMotor = false, ms = $('skMotor');
@@ -406,7 +408,7 @@ window.Sketch = (function () {
       if (S.light === true && !has) selId = addLight().id; else if (S.light !== true && has) { S.items = S.items.filter(function (i) { return i.type !== 'light'; }); selId = null; }
       touch(); });
     $('skMotor').addEventListener('change', function () { if (readOnly) return; S.motor = this.value || null; touch(); });
-    $('skFinish').addEventListener('click', function (ev) { var b = ev.target.closest('button[data-finish],button[data-series]'); if (!b || b.disabled) return; if (b.dataset.series) S.series = b.dataset.series; else S.finish = b.dataset.finish; touch(); });
+    $('skFinish').addEventListener('click', function (ev) { var b = ev.target.closest('button[data-finish],button[data-series]'); if (!b || b.disabled) return; if (b.dataset.series) { S.series = b.dataset.series; if (S.series === 'prime') S.finish = 'grey'; } else S.finish = b.dataset.finish; touch(); });
     $('skReset').addEventListener('click', function () { if (readOnly) return; if (arm('reset')) { var notes = S.notes; uid = 0; S = fresh(); S.notes = notes; selId = null; touch(); } });
     $('skNotes').value = S.notes || '';
     // the same save button again at the bottom of the screen
