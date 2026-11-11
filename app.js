@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-074025';
+  var APP_VERSION = '20261111-074110';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -382,7 +382,7 @@
     } else {
       h += fInp('nNum', 'מס\' הזמנה באינטגרל', v('num'), ' inputmode="numeric"') +
         (o ? '' : '<label for="nTub">מספר סידורי (ניתן אוטומטית)<input id="nTub" readonly value="' + pad4(Math.max(st.nextSerial, serialFloor())) + '"></label>') +
-        fInp('nStore', 'חנות', v('store')) + fInp('nCust', 'לקוח (לא חובה)', v('customer')) +
+        fInp('nStore', 'לקוח', v('store')) + fInp('nCust', 'לקוח סופי (לא חובה)', v('customer')) +
         fSel('nModel', 'דגם אמבטיה', MODELS.map(function (m) { return [m.code, (m.name || m.code) + ' · ' + m.dims]; }), v('model'), 'בחירת דגם') +
         fSel('nSys', 'מערכת', [['BASIC', 'BASIC'], ['TITANIUM', 'TITANIUM'], ['אחר', 'אחר']], v('system') || 'BASIC') + agentSel +
         fInp('nPhone', 'טלפון הלקוח', v('phone'), ' inputmode="tel" dir="ltr"') + fInp('nEmail', 'מייל הלקוח', v('custEmail'), ' type="email" dir="ltr"') +
@@ -625,7 +625,7 @@
     if (ev.target.id === 'nCancel') { st.form = false; st.editId = null; render(); return; }
     if (ev.target.id !== 'nSave') return;
     var d = formValues(), o = st.editId ? find(st.editId) : null;
-    if (!d.customer && !d.num && !d.store) { $('nErr').textContent = 'צריך לפחות חנות, לקוח או מספר הזמנה.'; return; }
+    if (!d.customer && !d.num && !d.store) { $('nErr').textContent = 'צריך לפחות לקוח או מספר הזמנה.'; return; }
     var mdl = MODEL[d.model]; if (st.kind === 'jacuzzi' && mdl && d.system === 'TITANIUM' && mdl.jb && !mdl.jt) { $('nErr').textContent = 'לפי הקטלוג אין ל-' + mdl.code + ' מערכת TITANIUM.'; return; }
     var tub = st.kind === 'spa' && !o ? ($('nTub').value || '').trim() : ''; if (tub && !/^\d{1,8}$/.test(tub)) { $('nErr').textContent = 'מספר סידורי הוא ספרות בלבד.'; return; }
     ev.target.disabled = true;
