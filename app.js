@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-104137';
+  var APP_VERSION = '20261111-104643';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -109,7 +109,7 @@
   var TOKEN = new URLSearchParams(location.search).get('a'), CUST_PAGE = /\/s\.html$/.test(location.pathname);
   // never hand out a serial that an existing order already carries (covers orders numbered before the counter existed, or by hand)
   function serialFloor() { var m = FIRST_SERIAL; st.all.filter(function (o) { return kindOf(o) === 'jacuzzi'; }).forEach(function (o) { var n = parseInt(o.tubNum, 10); if (n >= m && n < 100000) m = n + 1; }); return m; }
-  function showSerial() { var el = $('nTub'); if (el) el.value = pad4(Math.max(st.nextSerial, serialFloor())); }
+  function showSerial() { var el = $('nTub'); if (el && st.kind === 'jacuzzi' && !el.dataset.manual) el.value = pad4(Math.max(st.nextSerial, serialFloor())); }
   var st = { all: [], orders: [], editId: null, loaded: false, err: '', loc: '', q: '', agent: '', tab: 'open', openId: null, holdFor: null, form: false, usersOpen: false, armed: {}, busy: {}, appr: {}, nextSerial: FIRST_SERIAL };
 
   function $(id) { return document.getElementById(id); }
@@ -456,7 +456,8 @@
         '<div class="wide chkrow"><span class="lbl">אביזרים</span>' + SPA.accessories.map(function (a, k) { return fChk('nAcc' + k, a[1], (v('acc') || []).indexOf(a[0]) > -1); }).join('') + '</div>';
     } else {
       h += fInp('nNum', 'מס\' הזמנה באינטגרל', v('num'), ' inputmode="numeric"') +
-        (o ? '' : '<label for="nTub">מספר סידורי (ניתן אוטומטית)<input id="nTub" readonly value="' + pad4(Math.max(st.nextSerial, serialFloor())) + '"></label>') +
+        // the next serial is filled in; it can be overwritten for an old jacuzzi that already has a number (the counter then stays where it is)
+        (o ? '' : '<label for="nTub">מספר סידורי (אוטומטי, אפשר לשנות)<input id="nTub" inputmode="numeric" maxlength="4" autocomplete="off" value="' + pad4(Math.max(st.nextSerial, serialFloor())) + '"></label>') +
         fInp('nStore', 'לקוח', v('store')) + fInp('nCust', 'לקוח סופי (לא חובה)', v('customer')) +
         fSel('nModel', 'דגם אמבטיה', MODELS.map(function (m) { return [m.code, (m.name || m.code) + ' · ' + m.dims]; }), v('model'), 'בחירת דגם') +
         fSel('nSys', 'מערכת', [['BASIC', 'BASIC'], ['TITANIUM', 'TITANIUM'], ['אחר', 'אחר']], v('system') || 'BASIC') + agentSel +
@@ -713,6 +714,12 @@
   $('stageSel').addEventListener('change', function () { st.stageF = this.value; if (st.stageF) { st.tab = 'open'; st.loc = ''; } render(); });
   $('newBtn').addEventListener('click', function () { st.form = !st.form || !!st.editId; st.editId = null; st.usersOpen = false; $('form').innerHTML = ''; render(); if (st.form) $('nCust').focus(); });
   $('usersBtn').addEventListener('click', function () { st.usersOpen = !st.usersOpen; st.form = false; st.usersDirty = true; render(); });
+  $('form').addEventListener('input', function (ev) {
+    if (ev.target.id !== 'nTub' || st.kind !== 'jacuzzi' || st.editId) return;
+    var auto = pad4(Math.max(st.nextSerial, serialFloor())), man = ev.target.value.trim() !== auto, w = $('nWarn');
+    if (man) ev.target.dataset.manual = '1'; else delete ev.target.dataset.manual;
+    w.hidden = !man; w.textContent = man ? 'מספר ידני (לג\'קוזי שכבר קיבל מספר). המספור האוטומטי ימשיך מ-' + auto + '.' : '';
+  });
   $('form').addEventListener('change', function (ev) {
     if (ev.target.id === 'nTapFin') document.querySelectorAll('.pick[data-for="nTap"] button[data-val]').forEach(function (b) { var im = b.querySelector('img'); if (im) im.src = tapImg(b.dataset.val, ev.target.value); });
     var o = st.editId ? find(st.editId) : null;
@@ -753,6 +760,13 @@
         if (st.kind === 'spa') { order.tubNum = tub; await col.add(order); }
         else {
           order.approvalToken = newToken();
+          var tn = $('nTub'), manual = tn && tn.dataset.manual ? tn.value.trim() : '';
+          if (tn && tn.dataset.manual) {
+            if (!/^\d{4}$/.test(manual)) { ev.target.disabled = false; $('nErr').textContent = 'מספר סידורי הוא 4 ספרות.'; return; }
+            var dup = st.all.find(function (x) { return kindOf(x) === 'jacuzzi' && x.tubNum === manual; });
+            if (dup) { ev.target.disabled = false; $('nErr').textContent = 'המספר ' + manual + ' כבר קיים בהזמנה של ' + titleOf(dup) + '.'; return; }
+            order.tubNum = manual; await col.add(order);
+          } else
           // take the next serial and save the order together, so two people opening orders at once never get the same number
           await db.runTransaction(async function (tx) {
             var s = await tx.get(counterRef), n = Math.max(s.exists && s.data().serial ? s.data().serial : FIRST_SERIAL, serialFloor());
