@@ -11,7 +11,7 @@
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&family=Rubik:wght@500;700&display=swap">
-<link rel="stylesheet" href="app.css?v=20261111-074110">
+<link rel="stylesheet" href="app.css?v=20261111-074404">
 </head>
 <body>
 
@@ -47,14 +47,19 @@
   <div class="form" id="form" hidden></div>
   <div class="form" id="usersPanel" hidden></div>
 
-  <div class="jacView tiles" id="tiles"></div>
-  <div class="jacView filters">
+  <div class="tiles" id="tiles"></div>
+  <div class="board2">
+  <div class="maincol">
+  <div class="filters">
     <input id="q" type="search" placeholder="חיפוש: לקוח, מס' הזמנה, מס' סידורי, דגם" autocomplete="off" aria-label="חיפוש">
     <select id="agentSel" aria-label="סוכן"><option value="">כל הסוכנים</option></select>
   </div>
-  <div class="jacView row" id="tabs"></div>
-  <div class="jacView list" id="list"><div class="state">טוען הזמנות…</div></div>
-  <div class="jacView foot" id="foot"></div>
+  <div class="row" id="tabs"></div>
+  <div class="list" id="list"><div class="state">טוען הזמנות…</div></div>
+  </div>
+  <aside class="card side" id="side" hidden aria-live="polite"></aside>
+  </div>
+  <div class="foot" id="foot"></div>
 </div>
 
 <div id="custView" hidden>
@@ -73,10 +78,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js?v=20261111-074110"></script>
-<script src="models.js?v=20261111-074110"></script>
-<script src="spa-data.js?v=20261111-074110"></script>
-<script src="sketch.js?v=20261111-074110"></script>
-<script src="app.js?v=20261111-074110"></script>
+<script src="firebase-config.js?v=20261111-074404"></script>
+<script src="models.js?v=20261111-074404"></script>
+<script src="spa-data.js?v=20261111-074404"></script>
+<script src="sketch.js?v=20261111-074404"></script>
+<script src="app.js?v=20261111-074404"></script>
 </body>
 </html>

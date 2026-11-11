@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-074110';
+  var APP_VERSION = '20261111-074404';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -285,8 +285,18 @@
     var list = STAGES.filter(function (s) { return s.k !== 'delivered' && !skips(s, o); }), cur = list.findIndex(function (s) { return s.k === o.stage; });
     return '<div class="steps" aria-hidden="true">' + list.map(function (s, j) { return '<i class="' + (j < cur ? 'd' : j === cur ? 'c' : '') + '" style="--pc:' + LOCC[phaseOf(s.k, o)] + '"></i>'; }).join('') + '</div>';
   }
+  // On a wide screen the list stays on the right and the chosen order opens in a side panel on the left;
+  // on a phone the card opens in place.
+  var wideMq = window.matchMedia ? window.matchMedia('(min-width: 1000px)') : null, WIDE = !!(wideMq && wideMq.matches);
+  if (wideMq) { var onWide = function (e) { WIDE = e.matches; render(); }; if (wideMq.addEventListener) wideMq.addEventListener('change', onWide); else if (wideMq.addListener) wideMq.addListener(onWide); }
   function cardHtml(x) {
     var o = x.o, f = x.f, del = o.stage === 'delivered', open = st.openId === o.id;
+    var h = '<div class="card' + (f.hold ? ' hold' : f.late ? ' late' : '') + (open && WIDE ? ' sel' : '') + '" style="--lc:' + LOCC[f.loc] + '"><button type="button" data-open="' + esc(o.id) + '" aria-expanded="' + open + '">' + summaryHtml(o, f) + '</button>';
+    if (open && !WIDE) h += detailHtml(o, f);
+    return h + '</div>';
+  }
+  function summaryHtml(o, f) {
+    var del = o.stage === 'delivered';
     var chips = '<span class="chip' + (del ? ' ok' : '') + '">' + f.s.n + '</span>';
     if (f.hold) chips += '<span class="chip hold">מעוכב: ' + esc(o.hold.reason) + '</span>';
     else if (f.late) chips += '<span class="chip late">חריגה של ' + dayWord(f.over) + '</span>';
@@ -297,11 +307,18 @@
       : 'בשלב הזה ' + dayWord(f.el) + ' · אספקה צפויה יום ' + DAYS[f.eta.getDay()] + "' " + pad(f.eta.getDate()) + '/' + pad(f.eta.getMonth() + 1);
     var meta = (kindOf(o) === 'spa' ? [mname(o.model), o.equipName, o.acrylic ? 'אקריל ' + pick(SPA.acrylics, o.acrylic) : '', o.cabinet ? 'חיפוי ' + pick(SPA.cabinets, o.cabinet) : '']
       : [mname(o.model), o.system, o.panel ? 'כולל פאנל' : '']).concat([o.agent ? 'סוכן: ' + o.agent : '']).filter(Boolean).map(esc).join(' · ');
-    var h = '<div class="card' + (f.hold ? ' hold' : f.late ? ' late' : '') + '" style="--lc:' + LOCC[f.loc] + '"><button type="button" data-open="' + esc(o.id) + '" aria-expanded="' + open + '">' +
-      '<div class="c-top"><span class="c-cust">' + esc(titleOf(o)) + '</span><span class="c-num">' + [o.tubNum ? 'סידורי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · ') + '</span></div>' +
-      (meta ? '<div class="c-meta">' + meta + '</div>' : '') + '<div class="c-stage">' + chips + '</div>' + (del ? '' : stepsBar(o)) + '<div class="c-eta">' + eta + '</div></button>';
-    if (open) h += detailHtml(o, f);
-    return h + '</div>';
+    return '<div class="c-top"><span class="c-cust">' + esc(titleOf(o)) + '</span><span class="c-num">' + [o.tubNum ? 'סידורי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · ') + '</span></div>' +
+      (meta ? '<div class="c-meta">' + meta + '</div>' : '') + '<div class="c-stage">' + chips + '</div>' + (del ? '' : stepsBar(o)) + '<div class="c-eta">' + eta + '</div>';
+  }
+  function renderSide(now) {
+    var box = $('side');
+    if (!WIDE) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    var o = st.openId && find(st.openId);
+    if (!o) { box.className = 'card side empty'; box.style.removeProperty('--lc'); box.innerHTML = '<div class="state">' + (st.orders.length ? 'בוחרים הזמנה מהרשימה כדי לראות כאן את הפרטים.' : '') + '</div>'; return; }
+    var f = info(o, now);
+    box.className = 'card side' + (f.hold ? ' hold' : f.late ? ' late' : ''); box.style.setProperty('--lc', LOCC[f.loc]);
+    box.innerHTML = '<div class="side-head">' + summaryHtml(o, f) + '<button class="btn small" type="button" data-open="' + esc(o.id) + '">סגירה</button></div>' + detailHtml(o, f);
   }
   function detailHtml(o, f) {
     var id = esc(o.id), busy = st.busy[o.id] ? ' disabled' : '', del = o.stage === 'delivered', h = '<div class="detail">';
@@ -368,7 +385,7 @@
     var h = '<h2>' + (o ? 'עריכת פרטי ההזמנה · ' + esc(titleOf(o)) : 'הזמנה חדשה · ' + TR.word) + '</h2><div class="grid">';
     if (st.kind === 'spa') {
       h += fInp('nNum', 'מס\' הזמנה באינטגרל', v('num'), ' inputmode="numeric"') + (o ? '' : fInp('nTub', 'מספר סידורי', '', ' inputmode="numeric" maxlength="8"')) +
-        fInp('nCust', 'לקוח/ה', v('customer')) + fInp('nStore', 'חנות (רק אם ההזמנה דרך חנות)', v('store')) + fInp('nPhone', 'טלפון הלקוח', v('phone'), ' inputmode="tel" dir="ltr"') + fInp('nAddr', 'כתובת', v('address')) + agentSel +
+        fInp('nCust', 'לקוח/ה', v('customer')) + fInp('nStore', 'חנות (לא חובה)', v('store')) + fInp('nPhone', 'טלפון הלקוח', v('phone'), ' inputmode="tel" dir="ltr"') + fInp('nAddr', 'כתובת', v('address')) + agentSel +
         fSel('nModel', 'דגם', SPA.models.map(function (m) { return [m.id, m.name + ' · ' + m.dims + (m.swim ? ' · בריכת זרמים' : '')]; }), v('model'), 'בחירת דגם') +
         '<label for="nEquip">איבזור<select id="nEquip">' + equipOpts(v('model'), v('equipName')) + '</select></label>' +
         fSel('nAcrylic', 'צבע אקריל', SPA.acrylics.map(function (a) { return [a[0], a[1] + ' · ' + a[0]]; }), v('acrylic'), 'בחירה') + fSel('nCabinet', 'חיפוי', SPA.cabinets, v('cabinet'), 'בחירה') +
@@ -434,12 +451,12 @@
   function render() {
     if (!me) return;
     var a = document.activeElement;
-    if (a && ($('list').contains(a) || $('usersPanel').contains(a) || ($('sketchView').querySelector('#skExtra') || $('list')).contains(a)) && (a.tagName === 'INPUT')) { pending = true; return; }
+    if (a && ($('list').contains(a) || $('side').contains(a) || $('usersPanel').contains(a) || ($('sketchView').querySelector('#skExtra') || $('list')).contains(a)) && (a.tagName === 'INPUT')) { pending = true; return; }
     pending = false;
     var now = new Date();
     $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); applyKind();
     $('banner').hidden = me.role !== 'agent'; if (me.role === 'agent') $('banner').textContent = 'תצוגה בלבד: כאן רואים איפה כל ' + TR.word + ' של הלקוחות שלך ומתי הוא צפוי לרדת.';
-    renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderList(now); refreshSketchSend();
+    renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderList(now); renderSide(now); refreshSketchSend();
     $('foot').textContent = st.loaded ? 'ימי עבודה: א\'–ה\'. חריגה מסומנת כשהזמנה נשארת בשלב יותר מהזמן שהוקצב לו.' : '';
   }
   document.addEventListener('focusout', function () { if (pending) setTimeout(render, 0); });
@@ -560,7 +577,7 @@
   }
 
   $('sketchView').addEventListener('click', function (ev) { if (ev.target.closest('#skExtra')) onAct(ev); });
-  $('list').addEventListener('click', onAct);
+  $('list').addEventListener('click', onAct); $('side').addEventListener('click', onAct);
   function onAct(ev) {
     var a = ev.target.closest('a[data-send]'), o;
     if (a && (o = find(a.dataset.send))) { // the link itself opens WhatsApp / SMS / mail; here we only record that it was sent
@@ -575,7 +592,7 @@
     else if (d.savecontact && (o = find(d.savecontact))) { var P = d.pfx || '', pv = $(P + 'ph-' + o.id).value.trim(), em = $(P + 'em-' + o.id).value.trim(); document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ phone: pv, custEmail: em }); }); }
     else if (d.copy && (o = find(d.copy))) { var link = custLink(o); (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () { b.textContent = 'הקישור הועתק'; }, function () { b.outerHTML = '<input readonly dir="ltr" value="' + esc(link) + '" onfocus="this.select()">'; }); }
     else if (d.edit && (o = find(d.edit))) { st.editId = o.id; st.form = false; st.usersOpen = false; $('form').innerHTML = ''; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-    else if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); }
+    else if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); if (WIDE) $('side').scrollTop = 0; }
     else if (d.sketch && (o = find(d.sketch))) { if (o.sketch || canDraw(o)) openSketch(o); }
     else if (d.next && (o = find(d.next))) { var nx = nextStage(o); if (nx && canAct(STAGES[IDX[o.stage]])) write(o.id, function () {
       return move(o, nx.k, null, o.stage === TR.kitStage ? { kitList: kitDraft(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; }) } : null); }); }
