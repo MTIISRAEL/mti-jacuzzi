@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-071257';
+  var APP_VERSION = '20261111-072147';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -50,6 +50,20 @@
   var st = { orders: [], loaded: false, err: '', loc: '', q: '', agent: '', tab: 'open', openId: null, holdFor: null, form: false, usersOpen: false, armed: {}, busy: {}, appr: {}, nextSerial: FIRST_SERIAL };
 
   function $(id) { return document.getElementById(id); }
+  // two trackers on one site: home jacuzzi and spa. The choice is remembered on this computer only.
+  try { st.kind = localStorage.getItem('mtiKind') === 'spa' ? 'spa' : 'jacuzzi'; } catch (e) { st.kind = 'jacuzzi'; }
+  function applyKind() {
+    var spa = st.kind === 'spa';
+    document.querySelectorAll('.kind').forEach(function (b) { var on = b.dataset.kind === st.kind; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+    document.querySelectorAll('.jacView').forEach(function (el) { el.hidden = spa; });
+    $('spaView').hidden = !spa; if (spa) { $('form').hidden = true; st.form = false; }
+    $('newBtn').hidden = spa || !isOffice();
+  }
+  document.querySelector('.kinds').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-kind]'); if (!b || b.dataset.kind === st.kind) return;
+    st.kind = b.dataset.kind; try { localStorage.setItem('mtiKind', st.kind); } catch (e) {}
+    applyKind(); if (st.kind === 'jacuzzi') render();
+  });
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function fmt(iso) { var d = new Date(iso); if (isNaN(d)) return ''; return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
@@ -352,7 +366,7 @@
     if (a && ($('list').contains(a) || $('usersPanel').contains(a) || ($('sketchView').querySelector('#skExtra') || $('list')).contains(a)) && (a.tagName === 'INPUT')) { pending = true; return; }
     pending = false;
     var now = new Date();
-    $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin();
+    $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); applyKind(); if (st.kind === 'spa') return;
     $('banner').hidden = me.role !== 'agent'; if (me.role === 'agent') $('banner').textContent = 'תצוגה בלבד: כאן רואים איפה כל ג\'קוזי של הלקוחות שלך ומתי הוא צפוי לרדת.';
     renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderList(now); refreshSketchSend();
     $('foot').textContent = st.loaded ? 'ימי עבודה: א\'–ה\'. חריגה מסומנת כשהזמנה נשארת בשלב יותר מהזמן שהוקצב לו.' : '';

@@ -7,7 +7,7 @@
 <title>מעקב ג'קוזי MTI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&family=Rubik:wght@500;700&display=swap">
-<link rel="stylesheet" href="app.css?v=20261111-071257">
+<link rel="stylesheet" href="app.css?v=20261111-072147">
 </head>
 <body>
 
@@ -30,7 +30,7 @@
 
 <div class="wrap" id="appView" hidden>
   <div class="head">
-    <div><h1>מעקב ג'קוזי</h1><div class="sub" id="whoami"></div></div>
+    <div><h1 class="kinds" role="tablist" aria-label="מה עוקבים"><button class="kind on" type="button" role="tab" aria-selected="true" data-kind="jacuzzi">מעקב ג'קוזי</button><button class="kind" type="button" role="tab" aria-selected="false" data-kind="spa">מעקב ספא</button></h1><div class="sub" id="whoami"></div></div>
     <div class="row">
       <button class="btn primary" id="newBtn" type="button" hidden>+ הזמנה חדשה</button>
       <button class="btn small" id="usersBtn" type="button" hidden>משתמשים</button>
@@ -43,14 +43,15 @@
   <div class="form" id="form" hidden></div>
   <div class="form" id="usersPanel" hidden></div>
 
-  <div class="tiles" id="tiles"></div>
-  <div class="filters">
+  <div class="state" id="spaView" hidden>מעקב הספא בהכנה. בקרוב יופיעו כאן הזמנות הספא.</div>
+  <div class="jacView tiles" id="tiles"></div>
+  <div class="jacView filters">
     <input id="q" type="search" placeholder="חיפוש: לקוח, מס' הזמנה, מס' סידורי, דגם" autocomplete="off" aria-label="חיפוש">
     <select id="agentSel" aria-label="סוכן"><option value="">כל הסוכנים</option></select>
   </div>
-  <div class="row" id="tabs"></div>
-  <div class="list" id="list"><div class="state">טוען הזמנות…</div></div>
-  <div class="foot" id="foot"></div>
+  <div class="jacView row" id="tabs"></div>
+  <div class="jacView list" id="list"><div class="state">טוען הזמנות…</div></div>
+  <div class="jacView foot" id="foot"></div>
 </div>
 
 <div id="custView" hidden>
@@ -69,9 +70,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js?v=20261111-071257"></script>
-<script src="models.js?v=20261111-071257"></script>
-<script src="sketch.js?v=20261111-071257"></script>
-<script src="app.js?v=20261111-071257"></script>
+<script src="firebase-config.js?v=20261111-072147"></script>
+<script src="models.js?v=20261111-072147"></script>
+<script src="sketch.js?v=20261111-072147"></script>
+<script src="app.js?v=20261111-072147"></script>
 </body>
 </html>
