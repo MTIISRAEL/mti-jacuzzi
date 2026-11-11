@@ -1,12 +1,12 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-072633';
+  var APP_VERSION = '20261111-073417';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
   // fitting takes hours, the queue before it is where the days go.
   // `roles` = who may press the button that completes the stage (admin always may).
-  var STAGES = [
+  var J_STAGES = [
     { k: 'request',    n: 'בקשת אספקה',           loc: 'a1',   who: 'משרד',        roles: ['office'],                        t: 1, done: 'מתחילים שרטוט ומפרט' },
     { k: 'drawing',    n: 'שרטוט ומפרט',          loc: 'a1',   who: 'משרד',        roles: ['office'],                        t: 1, done: 'השרטוט נשלח ללקוח' },
     { k: 'approval',   n: 'ממתין לאישור לקוח',    loc: 'a1',   who: 'משרד',        roles: ['office'],                        t: 3, done: 'הלקוח אישר את השרטוט' },
@@ -21,13 +21,44 @@
     { k: 'ready',      n: 'מוכן לאספקה',          loc: 'a2',   who: 'נהגים',       roles: ['driver', 'warehouse', 'office'], t: 2, done: 'סופק ללקוח' },
     { k: 'delivered',  n: 'סופק',                 loc: 'done', who: '',            roles: [],                                t: 0, done: '' }
   ];
-  var IDX = {}; STAGES.forEach(function (s, i) { IDX[s.k] = i; });
-  var LOCS = [
+  // Spa and swim spa: the 15 stations of the older spa system. Kobi (an admin) signs off the technical review.
+  // Cladding is skipped unless the spa stands above ground; "kit sent to Barkan" is skipped when fitting is done in Ashdod.
+  var S_STAGES = [
+    { k: 'draft',     n: 'טיוטת מכירה',          loc: 'a1',   who: 'משרד',          roles: ['office'],                t: 2, done: 'המפרט מוכן, לבדיקה טכנית' },
+    { k: 'tech',      n: 'בדיקה טכנית',          loc: 'a1',   who: 'קובי',          roles: [],                        t: 2, done: 'הבדיקה הטכנית אושרה' },
+    { k: 'kitList',   n: 'הכנת קיט',             loc: 'a1',   who: 'משרד',          roles: ['office'],                t: 1, done: 'רשימת הקיט הועברה לליקוט' },
+    { k: 'picking',   n: 'ליקוט',                loc: 'a1',   who: 'מחסן אשדוד',    roles: ['warehouse'],             t: 1, done: 'הליקוט הסתיים' },
+    { k: 'kitSent',   n: 'קיט נשלח לברקן',       loc: 'a1',   who: 'מחסן אשדוד',    roles: ['warehouse'],             t: 1, done: 'הקיט נשלח לברקן' },
+    { k: 'shell',     n: 'קליפה',                loc: 'bk',   who: 'מנהל ברקן',     roles: ['barkan'],                t: 3, done: 'הקליפה מוכנה' },
+    { k: 'frame',     n: 'גישטל',                loc: 'bk',   who: 'מנהל ברקן',     roles: ['barkan'],                t: 2, done: 'הגישטל מוכן' },
+    { k: 'drill',     n: 'קדיחה ושפשוף',         loc: 'bk',   who: 'מנהל ברקן',     roles: ['barkan'],                t: 1, done: 'הקדיחה והשפשוף הסתיימו' },
+    { k: 'cladding',  n: 'חיפוי',                loc: 'bk',   who: 'מנהל ברקן',     roles: ['barkan'],                t: 1, done: 'החיפוי הסתיים' },
+    { k: 'equip',     n: 'איבזור',               loc: 'bk',   who: 'מנהל ברקן',     roles: ['barkan', 'warehouse'],   t: 2, done: 'האיבזור הסתיים' },
+    { k: 'test',      n: 'טסט, ניקיון ואריזה',   loc: 'a2',   who: 'מחסן אשדוד',    roles: ['warehouse'],             t: 1, done: 'עבר טסט, נוקה ונארז' },
+    { k: 'ready',     n: 'מוכן למשלוח',          loc: 'a2',   who: 'מחסן אשדוד',    roles: ['warehouse', 'office'],   t: 1, done: 'הועבר לאישור תשלום' },
+    { k: 'payment',   n: 'אישור תשלום',          loc: 'a2',   who: 'הנהלת חשבונות', roles: ['office'],                t: 2, done: 'התשלום אושר' },
+    { k: 'awaiting',  n: 'ממתין למסירה',         loc: 'a2',   who: 'משרד',          roles: ['office', 'driver'],      t: 3, done: 'נמסר ללקוח' },
+    { k: 'delivered', n: 'נמסר',                 loc: 'done', who: '',              roles: [],                        t: 0, done: '' }
+  ];
+  var S_LOCS = [
+    { k: 'a1', n: 'אשדוד · מכירה וקיט',  c: 'var(--ashdod)' },
+    { k: 'bk', n: 'ברקן · ייצור',        c: 'var(--barkan)' },
+    { k: 'a2', n: 'אשדוד · טסט ומסירה',  c: 'var(--ashdod)' }
+  ];
+  var J_LOCS = [
     { k: 'a1',   n: 'אשדוד · הכנה',           c: 'var(--ashdod)' },
     { k: 'road', n: 'בדרך במשאית',            c: 'var(--road)' },
     { k: 'bk',   n: 'ברקן',                   c: 'var(--barkan)' },
     { k: 'a2',   n: 'אשדוד · בדיקה ואספקה',   c: 'var(--ashdod)' }
   ];
+  // the two trackers. kitStage: where the office builds the kit list; kitFrom..kitTo: where the frozen list is shown.
+  var TRACK = {
+    jacuzzi: { stages: J_STAGES, locs: J_LOCS, kitStage: 'kitOrder', kitFrom: 'kit', kitTo: 'fitting', word: "ג'קוזי" },
+    spa:     { stages: S_STAGES, locs: S_LOCS, kitStage: 'kitList', kitFrom: 'picking', kitTo: 'equip', word: 'ספא' }
+  };
+  var TR, STAGES, IDX, LOCS;
+  function useTrack(k) { TR = TRACK[k] || TRACK.jacuzzi; STAGES = TR.stages; LOCS = TR.locs; IDX = {}; STAGES.forEach(function (s, i) { IDX[s.k] = i; }); }
+  useTrack('jacuzzi');
   var LOCC = { a1: 'var(--ashdod)', a2: 'var(--ashdod)', bk: 'var(--barkan)', road: 'var(--road)', done: 'var(--ok)' };
   var ROLES = { admin: 'מנהל', office: 'משרד', warehouse: 'מחסן אשדוד', barkan: 'מנהל ברקן', driver: 'נהג', agent: 'סוכן' };
   // Field agents by name. An agent who should sign in and see only their own orders is also added under Users
@@ -37,7 +68,14 @@
   var DAYS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
   var MODELS = window.MTI_MODELS || [], MODEL = {}; MODELS.forEach(function (m) { MODEL[m.code] = m; });
   // what to show for a stored model code: the model name, plus the size when the model comes in more than one
-  function mname(code) { var m = MODEL[code]; return !m ? (code || '') : m.name ? m.name + ' (' + m.dims + ')' : m.code; }
+  var SPA = window.MTI_SPA || { models: [] }, SPA_MODEL = {}; SPA.models.forEach(function (m) { SPA_MODEL[m.id] = m; });
+  function pick(list, id) { var x = (list || []).find(function (p) { return p[0] === id; }); return x ? x[1] : ''; }
+  function kindOf(o) { return o && o.kind === 'spa' ? 'spa' : 'jacuzzi'; }
+  // stations a given order skips, and where an order stands (fitting in Ashdod counts as Ashdod)
+  function skips(s, o) { return kindOf(o) === 'spa' && ((s.k === 'cladding' && o.install && o.install !== 'above') || (s.k === 'kitSent' && o.equipLoc === 'ashdod')); }
+  function nextStage(o) { for (var j = IDX[o.stage] + 1; j < STAGES.length; j++) if (!skips(STAGES[j], o)) return STAGES[j]; return null; }
+  function locOf(s, o) { return s.k === 'equip' && o.equipLoc === 'ashdod' ? 'a2' : s.loc; }
+  function mname(code) { var sm = SPA_MODEL[code]; if (sm) return sm.name + ' · ' + sm.dims; var m = MODEL[code]; return !m ? (code || '') : m.name ? m.name + ' (' + m.dims + ')' : m.code; }
 
   var me = null, col = db.collection('orders'), usersCol = db.collection('users'), apCol = db.collection('approvals'), unsub = [], users = [];
   // Serial numbers run on their own: meta/counters.serial holds the next one to hand out.
@@ -45,24 +83,23 @@
   function pad4(n) { n = String(n); while (n.length < 4) n = '0' + n; return n; }
   var TOKEN = new URLSearchParams(location.search).get('a'), CUST_PAGE = /\/s\.html$/.test(location.pathname);
   // never hand out a serial that an existing order already carries (covers orders numbered before the counter existed, or by hand)
-  function serialFloor() { var m = FIRST_SERIAL; st.orders.forEach(function (o) { var n = parseInt(o.tubNum, 10); if (n >= m && n < 100000) m = n + 1; }); return m; }
+  function serialFloor() { var m = FIRST_SERIAL; st.all.filter(function (o) { return kindOf(o) === 'jacuzzi'; }).forEach(function (o) { var n = parseInt(o.tubNum, 10); if (n >= m && n < 100000) m = n + 1; }); return m; }
   function showSerial() { var el = $('nTub'); if (el) el.value = pad4(Math.max(st.nextSerial, serialFloor())); }
-  var st = { orders: [], loaded: false, err: '', loc: '', q: '', agent: '', tab: 'open', openId: null, holdFor: null, form: false, usersOpen: false, armed: {}, busy: {}, appr: {}, nextSerial: FIRST_SERIAL };
+  var st = { all: [], orders: [], editId: null, loaded: false, err: '', loc: '', q: '', agent: '', tab: 'open', openId: null, holdFor: null, form: false, usersOpen: false, armed: {}, busy: {}, appr: {}, nextSerial: FIRST_SERIAL };
 
   function $(id) { return document.getElementById(id); }
   // two trackers on one site: home jacuzzi and spa. The choice is remembered on this computer only.
   try { st.kind = localStorage.getItem('mtiKind') === 'spa' ? 'spa' : 'jacuzzi'; } catch (e) { st.kind = 'jacuzzi'; }
+  function pickOrders() { st.orders = st.all.filter(function (o) { return kindOf(o) === st.kind; }); }
   function applyKind() {
-    var spa = st.kind === 'spa';
+    useTrack(st.kind); pickOrders();
     document.querySelectorAll('.kind').forEach(function (b) { var on = b.dataset.kind === st.kind; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
-    document.querySelectorAll('.jacView').forEach(function (el) { el.hidden = spa; });
-    $('spaView').hidden = !spa; if (spa) { $('form').hidden = true; st.form = false; }
-    $('newBtn').hidden = spa || !isOffice();
   }
   document.querySelector('.kinds').addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-kind]'); if (!b || b.dataset.kind === st.kind) return;
     st.kind = b.dataset.kind; try { localStorage.setItem('mtiKind', st.kind); } catch (e) {}
-    applyKind(); if (st.kind === 'jacuzzi') render();
+    st.form = false; st.editId = null; st.openId = null; st.loc = ''; st.tab = 'open'; $('form').innerHTML = '';
+    applyKind(); render();
   });
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -78,8 +115,8 @@
   function info(o, now) {
     var i = IDX[o.stage], unknown = i == null; if (unknown) i = 0; // a stage this screen does not know: it is running an older version
     var s = unknown ? { k: o.stage, n: 'שלב חדש, צריך לרענן את הדף', loc: 'a1', who: '', roles: [], t: 99, done: '' } : STAGES[i], el = workDays(o.stageAt, now), late = s.k !== 'delivered' && el > s.t, rem = Math.max(0, s.t - el);
-    for (var j = i + 1; j < STAGES.length; j++) rem += STAGES[j].t;
-    return { i: i, s: s, el: el, late: late, over: el - s.t, eta: addWork(now, rem), hold: !!(o.hold && o.hold.reason), unknown: unknown };
+    for (var j = i + 1; j < STAGES.length; j++) if (!skips(STAGES[j], o)) rem += STAGES[j].t;
+    return { i: i, s: s, loc: locOf(s, o), el: el, late: late, over: el - s.t, eta: addWork(now, rem), hold: !!(o.hold && o.hold.reason), unknown: unknown };
   }
   function dayWord(n) { return n === 0 ? 'מהיום' : n === 1 ? 'יום עבודה אחד' : n + ' ימי עבודה'; }
 
@@ -95,7 +132,7 @@
   // being typed or drawn; otherwise it shows a bar with a button.
   var newVersion = null;
   function hardReload() { location.replace(location.pathname + '?r=' + encodeURIComponent(newVersion || Date.now()) + (TOKEN ? '&a=' + TOKEN : '')); }
-  function busyNow() { var a = document.activeElement, tag = a && a.tagName; return st.form || st.usersOpen || !$('sketchView').hidden || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'; }
+  function busyNow() { var a = document.activeElement, tag = a && a.tagName; return st.form || st.editId || st.usersOpen || !$('sketchView').hidden || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'; }
   function checkVersion() {
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
       if (!j || !j.v || j.v === APP_VERSION) return;
@@ -115,7 +152,7 @@
   function custLink(o) { return location.origin + location.pathname.replace(/[^\/]*$/, '') + 's.html?a=' + o.approvalToken; }
   function intlPhone(p) { var d = String(p || '').replace(/\D/g, ''); if (d.indexOf('972') === 0) return d; if (d.charAt(0) === '0') return '972' + d.slice(1); return d; }
   // card title: the store first, then the end customer ("קרמיק דיפו - שמעון")
-  function titleOf(o) { return [o.store, o.customer].filter(Boolean).join(' - ') || 'ללא שם לקוח'; }
+  function titleOf(o) { return [o.store, o.customer].filter(Boolean).join(' - ') || (o.num ? 'הזמנה ' + o.num : 'ללא שם'); }
   function custMessage(o) { return 'שלום' + (o.customer ? ' ' + o.customer : '') + ', כאן MTI. מצורפת סקיצת הג\'קוזי שהזמנת' + (o.model ? ' (' + (MODEL[o.model] && MODEL[o.model].name || o.model) + ')' : '') + '. נא לבדוק את הקירות, פריסת הג\'טים ופתח השירות, ולאשר בקישור:\n' + custLink(o); }
   async function customerMode() {
     ['loginView', 'noAccessView', 'appView'].forEach(function (v) { $(v).hidden = true; });
@@ -189,12 +226,12 @@
   });
 
   function start() {
-    st.loaded = false; st.err = ''; st.orders = [];
+    st.loaded = false; st.err = ''; st.orders = []; st.all = [];
     show('appView');
     $('whoami').textContent = (me.name || me.email) + ' · ' + ROLES[me.role];
     var q = me.role === 'agent' ? col.where('agentEmail', '==', me.email) : col;
     unsub.push(q.onSnapshot(function (snap) {
-      st.loaded = true; st.orders = snap.docs.map(function (d) { var o = Object.assign({}, d.data()); o.id = d.id; return o; }); render();
+      st.loaded = true; st.all = snap.docs.map(function (d) { var o = Object.assign({}, d.data()); o.id = d.id; return o; }); pickOrders(); render();
     }, function () { st.err = 'לא הצלחנו לטעון את ההזמנות. בדקו את החיבור ופתחו שוב.'; render(); }));
     if (me.role !== 'agent') unsub.push(apCol.where('status', 'in', ['approved', 'changes']).onSnapshot(function (snap) {
       st.appr = {}; snap.docs.forEach(function (d) { var a = d.data(); a.token = d.id; if (a.orderId) st.appr[a.orderId] = a; });
@@ -212,7 +249,7 @@
     return st.orders.filter(function (o) {
       var del = o.stage === 'delivered';
       if (st.tab === 'open' ? del : !del) return false;
-      if (st.loc && STAGES[IDX[o.stage] || 0].loc !== st.loc) return false;
+      if (st.loc && locOf(STAGES[IDX[o.stage] || 0], o) !== st.loc) return false;
       if (st.agent && (o.agent || '') !== st.agent) return false;
       if (q && [o.customer, o.num, o.tubNum, o.model, o.agent, o.store].join(' ').toLowerCase().indexOf(q) < 0) return false;
       return true;
@@ -223,8 +260,8 @@
   }
   function renderTiles(now) {
     var open = st.orders.filter(function (o) { return o.stage !== 'delivered'; });
-    $('tiles').innerHTML = LOCS.map(function (L) {
-      var here = open.filter(function (o) { return STAGES[IDX[o.stage] || 0].loc === L.k; });
+    $('tiles').style.gridTemplateColumns = LOCS.length === 3 ? 'repeat(3, 1fr)' : ''; $('tiles').innerHTML = LOCS.map(function (L) {
+      var here = open.filter(function (o) { return locOf(STAGES[IDX[o.stage] || 0], o) === L.k; });
       var bad = here.filter(function (o) { var f = info(o, now); return f.late || f.hold; }).length;
       return '<button class="tile" type="button" data-loc="' + L.k + '" aria-pressed="' + (st.loc === L.k) + '" style="--tc:' + L.c + '"><span class="n">' + here.length + '</span><span class="l">' + L.n + '</span><span class="late">' + (bad ? bad + ' מתעכבות' : '') + '</span></button>';
     }).join('');
@@ -252,8 +289,9 @@
     else if (o.stage === 'approval' && o.approvalSentAt) chips += '<span class="chip">נשלח ללקוח</span>';
     var eta = del ? 'סופק ב-' + fmt(o.stageAt) : f.hold ? 'אספקה צפויה: לא ידוע עד שהעיכוב יוסר'
       : 'בשלב הזה ' + dayWord(f.el) + ' · אספקה צפויה יום ' + DAYS[f.eta.getDay()] + "' " + pad(f.eta.getDate()) + '/' + pad(f.eta.getMonth() + 1);
-    var meta = [mname(o.model), o.system, o.panel ? 'כולל פאנל' : '', o.agent ? 'סוכן: ' + o.agent : ''].filter(Boolean).map(esc).join(' · ');
-    var h = '<div class="card' + (f.hold ? ' hold' : f.late ? ' late' : '') + '" style="--lc:' + LOCC[f.s.loc] + '"><button type="button" data-open="' + esc(o.id) + '" aria-expanded="' + open + '">' +
+    var meta = (kindOf(o) === 'spa' ? [mname(o.model), o.equipName, o.acrylic ? 'אקריל ' + pick(SPA.acrylics, o.acrylic) : '', o.cabinet ? 'חיפוי ' + pick(SPA.cabinets, o.cabinet) : '']
+      : [mname(o.model), o.system, o.panel ? 'כולל פאנל' : '']).concat([o.agent ? 'סוכן: ' + o.agent : '']).filter(Boolean).map(esc).join(' · ');
+    var h = '<div class="card' + (f.hold ? ' hold' : f.late ? ' late' : '') + '" style="--lc:' + LOCC[f.loc] + '"><button type="button" data-open="' + esc(o.id) + '" aria-expanded="' + open + '">' +
       '<div class="c-top"><span class="c-cust">' + esc(titleOf(o)) + '</span><span class="c-num">' + [o.tubNum ? 'סידורי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · ') + '</span></div>' +
       (meta ? '<div class="c-meta">' + meta + '</div>' : '') + '<div class="c-stage">' + chips + '</div>' + (del ? '' : stepsBar(f.i)) + '<div class="c-eta">' + eta + '</div></button>';
     if (open) h += detailHtml(o, f);
@@ -262,7 +300,9 @@
   function detailHtml(o, f) {
     var id = esc(o.id), busy = st.busy[o.id] ? ' disabled' : '', del = o.stage === 'delivered', h = '<div class="detail">';
     if (o.notes) h += '<div class="notes">' + esc(o.notes) + '</div>';
-    if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר סידורי</label><input id="tn-' + id + '" inputmode="numeric" maxlength="4" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
+    if (kindOf(o) === 'spa') h += spaSpec(o);
+    if (isOffice() && !del) h += '<button class="btn" type="button" data-edit="' + id + '">עריכת פרטי ההזמנה</button>';
+    if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר סידורי</label><input id="tn-' + id + '" inputmode="numeric" maxlength="' + (kindOf(o) === 'spa' ? 8 : 4) + '" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
     if (MODEL[o.model]) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
     if (MODEL[o.model] && o.sketch && me.role !== 'agent') h += '<button class="btn" type="button" data-skprint="' + id + '">הדפסת סקיצה למאבזר</button>';
     h += sendBox(o, '');
@@ -274,7 +314,8 @@
       else {
         if (canAct(f.s)) {
           var blockTxt = '';
-          if (f.s.k === 'kitOrder' && !kitDraft(o).length) blockTxt = 'הרשימה ריקה. מוסיפים לפחות פריט אחד.';
+          if (f.s.k === TR.kitStage && !kitDraft(o).length) blockTxt = 'הרשימה ריקה. מוסיפים לפחות פריט אחד.';
+          if (f.s.k === 'tech' && (!o.shell || !o.equipLoc || !o.install)) blockTxt = 'לפני האישור בוחרים סוג התקנה, מקור קליפה ומקום איבזור (בעריכת פרטי ההזמנה).';
           if (f.s.k === 'approval' && MODEL[o.model]) { if (!o.sketch) blockTxt = 'אי אפשר לאשר לפני שיש שרטוט.'; else if (o.sketchBlocking) blockTxt = 'בשרטוט יש בעיה מסומנת באדום. צריך לתקן לפני אישור.'; }
           h += '<button class="btn primary big" type="button" data-next="' + id + '"' + (busy || (blockTxt ? ' disabled' : '')) + '>' + f.s.done + (f.s.k === 'pack' && o.panel ? ' (כולל פאנל)' : '') + '</button>';
           if (blockTxt) h += '<div class="who">' + blockTxt + '</div>';
@@ -304,23 +345,47 @@
     var rows = visible(now);
     box.innerHTML = rows.length ? rows.map(cardHtml).join('') : '<div class="state">אין הזמנות שמתאימות לסינון.</div>';
   }
+  // One form for a new order and for changing an existing one (st.editId), in the fields of the current tracker.
+  function opts(list, cur, empty) { return (empty != null ? '<option value="">' + empty + '</option>' : '') + list.map(function (p) { return '<option value="' + esc(p[0]) + '"' + (p[0] === cur ? ' selected' : '') + '>' + esc(p[1]) + '</option>'; }).join(''); }
+  function fSel(id, label, list, cur, empty, cls) { return '<label' + (cls ? ' class="' + cls + '"' : '') + ' for="' + id + '">' + label + '<select id="' + id + '">' + opts(list, cur, empty) + '</select></label>'; }
+  function fInp(id, label, val, attrs) { return '<label for="' + id + '">' + label + '<input id="' + id + '" autocomplete="off" value="' + esc(val || '') + '"' + (attrs || '') + '></label>'; }
+  function fChk(id, label, on) { return '<label class="chk" for="' + id + '"><input id="' + id + '" type="checkbox"' + (on ? ' checked' : '') + '>' + label + '</label>'; }
+  function equipOpts(modelId, cur) { var m = SPA_MODEL[modelId]; return opts(m ? m.equip.map(function (e) { return [e[1], e[1] + (e[0] ? ' · מק"ט ' + e[0] : '')]; }) : [], cur, m ? 'בחירת איבזור' : 'בוחרים קודם דגם'); }
   function renderForm() {
-    var f = $('form'); f.hidden = !st.form; if (!st.form) { f.innerHTML = ''; return; }
+    var f = $('form'), on = st.form || !!st.editId; f.hidden = !on; if (!on) { f.innerHTML = ''; return; }
     if (f.innerHTML) return;
+    var o = st.editId ? find(st.editId) : null; if (st.editId && !o) { st.editId = null; f.hidden = true; return; }
+    var v = function (k) { return o && o[k] != null ? o[k] : ''; };
     var names = AGENTS.slice(); users.forEach(function (u) { if (u.role === 'agent' && u.name && names.indexOf(u.name) < 0) names.push(u.name); });
-    f.innerHTML = '<h2>הזמנה חדשה למעקב</h2><div class="grid">' +
-      '<label for="nNum">מס\' הזמנה באינטגרל<input id="nNum" inputmode="numeric" autocomplete="off"></label>' +
-      '<label for="nTub">מספר סידורי (ניתן אוטומטית)<input id="nTub" readonly value="' + pad4(Math.max(st.nextSerial, serialFloor())) + '"></label>' +
-      '<label for="nCust">לקוח<input id="nCust" autocomplete="off"></label>' +
-      '<label for="nModel">דגם אמבטיה<select id="nModel"><option value="">בחירת דגם</option>' + MODELS.map(function (m) { return '<option value="' + m.code + '">' + (m.name || m.code) + ' · ' + m.dims + '</option>'; }).join('') + '</select></label>' +
-      '<label for="nSys">מערכת<select id="nSys"><option>BASIC</option><option>TITANIUM</option><option>אחר</option></select></label>' +
-      '<label for="nAgent">סוכן<select id="nAgent"><option value="">ללא סוכן</option>' + names.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('') + '</select></label>' +
-      '<label for="nStore">חנות<input id="nStore" autocomplete="off"></label>' +
-      '<label for="nPhone">טלפון הלקוח<input id="nPhone" inputmode="tel" dir="ltr" autocomplete="off"></label>' +
-      '<label for="nEmail">מייל הלקוח<input id="nEmail" type="email" dir="ltr" autocomplete="off"></label>' +
-      '<label class="chk" for="nPanel"><input id="nPanel" type="checkbox">הלקוח הזמין פאנל</label>' +
-      '<label class="wide" for="nNotes">הערות<textarea id="nNotes" rows="2"></textarea></label></div>' +
-      '<div class="row"><button class="btn primary" type="button" id="nSave">הוספה למעקב</button><button class="btn" type="button" id="nCancel">ביטול</button><span id="nErr" style="color:var(--bad)"></span></div>';
+    if (o && o.agent && names.indexOf(o.agent) < 0) names.push(o.agent);
+    var agentSel = fSel('nAgent', 'סוכן', names.map(function (n) { return [n, n]; }), v('agent'), 'ללא סוכן');
+    var h = '<h2>' + (o ? 'עריכת פרטי ההזמנה · ' + esc(titleOf(o)) : 'הזמנה חדשה · ' + TR.word) + '</h2><div class="grid">';
+    if (st.kind === 'spa') {
+      h += fInp('nNum', 'מס\' הזמנה באינטגרל', v('num'), ' inputmode="numeric"') + (o ? '' : fInp('nTub', 'מספר סידורי', '', ' inputmode="numeric" maxlength="8"')) +
+        fInp('nStore', 'חנות', v('store')) + fInp('nCust', 'לקוח (לא חובה)', v('customer')) + fInp('nPhone', 'טלפון הלקוח', v('phone'), ' inputmode="tel" dir="ltr"') + fInp('nAddr', 'כתובת', v('address')) + agentSel +
+        fSel('nModel', 'דגם', SPA.models.map(function (m) { return [m.id, m.name + ' · ' + m.dims + (m.swim ? ' · בריכת זרמים' : '')]; }), v('model'), 'בחירת דגם') +
+        '<label for="nEquip">איבזור<select id="nEquip">' + equipOpts(v('model'), v('equipName')) + '</select></label>' +
+        fSel('nAcrylic', 'צבע אקריל', SPA.acrylics.map(function (a) { return [a[0], a[1] + ' · ' + a[0]]; }), v('acrylic'), 'בחירה') + fSel('nCabinet', 'חיפוי', SPA.cabinets, v('cabinet'), 'בחירה') +
+        fSel('nPhase', 'חיבור חשמל', SPA.phases, v('phase'), 'בחירה') + fSel('nInstall', 'סוג התקנה', SPA.installs, v('install'), 'בחירה') +
+        fSel('nShell', 'מקור הקליפה (קובי)', SPA.shells, v('shell'), 'עוד לא נקבע') + fSel('nEquipLoc', 'מקום האיבזור (קובי)', SPA.equipLocs, v('equipLoc'), 'עוד לא נקבע') +
+        fSel('nDelivery', 'מסירה', SPA.delivery, v('delivery'), 'בחירה') + fSel('nController', 'בקר', SPA.controllers, v('controller'), 'בחירה') +
+        fSel('nJetColor', 'גוון ג\'טים', SPA.jetColors, v('jetColor'), 'בחירה') + fSel('nLights', 'תאורה בצדדים', [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']], v('lightSides') ? String(v('lightSides')) : '', 'ללא') +
+        '<div class="wide chkrow">' + fChk('nTouch4', 'Spa Touch 4 (WiFi)', v('touch4')) + fChk('nOzone', 'אוזון', v('ozone')) + fChk('nUv', 'UV', v('uv')) + '</div>' +
+        '<div class="wide chkrow"><span class="lbl">ספקי ג\'טים</span>' + SPA.jetSuppliers.map(function (n, k) { return fChk('nSup' + k, n, (v('jetSup') || []).indexOf(n) > -1); }).join('') + '</div>' +
+        '<div class="wide chkrow"><span class="lbl">אביזרים</span>' + SPA.accessories.map(function (a, k) { return fChk('nAcc' + k, a[1], (v('acc') || []).indexOf(a[0]) > -1); }).join('') + '</div>';
+    } else {
+      h += fInp('nNum', 'מס\' הזמנה באינטגרל', v('num'), ' inputmode="numeric"') +
+        (o ? '' : '<label for="nTub">מספר סידורי (ניתן אוטומטית)<input id="nTub" readonly value="' + pad4(Math.max(st.nextSerial, serialFloor())) + '"></label>') +
+        fInp('nStore', 'חנות', v('store')) + fInp('nCust', 'לקוח (לא חובה)', v('customer')) +
+        fSel('nModel', 'דגם אמבטיה', MODELS.map(function (m) { return [m.code, (m.name || m.code) + ' · ' + m.dims]; }), v('model'), 'בחירת דגם') +
+        fSel('nSys', 'מערכת', [['BASIC', 'BASIC'], ['TITANIUM', 'TITANIUM'], ['אחר', 'אחר']], v('system') || 'BASIC') + agentSel +
+        fInp('nPhone', 'טלפון הלקוח', v('phone'), ' inputmode="tel" dir="ltr"') + fInp('nEmail', 'מייל הלקוח', v('custEmail'), ' type="email" dir="ltr"') +
+        fChk('nPanel', 'הלקוח הזמין פאנל', v('panel'));
+    }
+    h += '<label class="wide" for="nNotes">הערות<textarea id="nNotes" rows="2">' + esc(v('notes')) + '</textarea></label></div>' +
+      '<div class="who" id="nWarn" hidden></div>' +
+      '<div class="row"><button class="btn primary" type="button" id="nSave">' + (o ? 'שמירת השינויים' : 'הוספה למעקב') + '</button><button class="btn" type="button" id="nCancel">ביטול</button><span id="nErr" style="color:var(--bad)"></span></div>';
+    f.innerHTML = h;
   }
   function renderUsers() {
     var p = $('usersPanel'); p.hidden = !st.usersOpen; if (!st.usersOpen) { p.innerHTML = ''; return; }
@@ -366,8 +431,8 @@
     if (a && ($('list').contains(a) || $('usersPanel').contains(a) || ($('sketchView').querySelector('#skExtra') || $('list')).contains(a)) && (a.tagName === 'INPUT')) { pending = true; return; }
     pending = false;
     var now = new Date();
-    $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); applyKind(); if (st.kind === 'spa') return;
-    $('banner').hidden = me.role !== 'agent'; if (me.role === 'agent') $('banner').textContent = 'תצוגה בלבד: כאן רואים איפה כל ג\'קוזי של הלקוחות שלך ומתי הוא צפוי לרדת.';
+    $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); applyKind();
+    $('banner').hidden = me.role !== 'agent'; if (me.role === 'agent') $('banner').textContent = 'תצוגה בלבד: כאן רואים איפה כל ' + TR.word + ' של הלקוחות שלך ומתי הוא צפוי לרדת.';
     renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderList(now); refreshSketchSend();
     $('foot').textContent = st.loaded ? 'ימי עבודה: א\'–ה\'. חריגה מסומנת כשהזמנה נשארת בשלב יותר מהזמן שהוקצב לו.' : '';
   }
@@ -385,17 +450,38 @@
   function move(o, key, note, extra) { var ev = event(key, note), u = { stage: key, stageAt: ev.at, hold: null, history: (o.history || []).concat([ev]) }; if (extra) Object.keys(extra).forEach(function (k) { u[k] = extra[k]; }); return col.doc(o.id).update(u); }
   // Kit order: what the warehouse has to pick. Until the office hands it over it follows the drawing plus lines the
   // office added by hand; at hand-over it is frozen into o.kitList, where the warehouse ticks each line.
-  function kitDraft(o) { var l = Sketch.kitOf(o.sketch); return l.concat((o.kitExtra || []).map(function (x, i) { return { n: x.n, q: x.q, sku: x.sku || '', extra: i }; })); }
+  // the spa kit for now: the equipment level by its item number, plus the options that were ordered (exact lists to follow)
+  function kitBase(o) {
+    if (kindOf(o) !== 'spa') return Sketch.kitOf(o.sketch);
+    var m = SPA_MODEL[o.model], out = [], c = pick(SPA.controllers, o.controller);
+    if (m) out.push({ n: 'איבזור ' + (o.equipName || '') + ' · ' + m.name, q: 1, sku: o.equip || '' });
+    if (c) out.push({ n: 'בקר ' + c, q: 1, sku: '' });
+    if (o.touch4) out.push({ n: 'פאנל Spa Touch 4 (WiFi)', q: 1, sku: '' });
+    if (o.ozone) out.push({ n: 'אוזון', q: 1, sku: '' });
+    if (o.uv) out.push({ n: 'UV', q: 1, sku: '' });
+    if (o.lightSides) out.push({ n: 'תאורה בצדדים', q: o.lightSides, sku: '' });
+    (o.acc || []).forEach(function (a) { var l = pick(SPA.accessories, a); if (l) out.push({ n: l, q: 1, sku: '' }); });
+    return out;
+  }
+  function spaSpec(o) {
+    var rows = [['דגם', mname(o.model)], ['איבזור', o.equipName], ['צבע אקריל', pick(SPA.acrylics, o.acrylic)], ['חיפוי', pick(SPA.cabinets, o.cabinet)], ['חשמל', pick(SPA.phases, o.phase)],
+      ['התקנה', pick(SPA.installs, o.install)], ['מקור הקליפה', pick(SPA.shells, o.shell)], ['מקום האיבזור', pick(SPA.equipLocs, o.equipLoc)], ['מסירה', pick(SPA.delivery, o.delivery)],
+      ['בקר', pick(SPA.controllers, o.controller) + (o.touch4 ? ' + Spa Touch 4' : '')], ['חיטוי', [o.ozone ? 'אוזון' : '', o.uv ? 'UV' : ''].filter(Boolean).join(', ')],
+      ['ג\'טים', [pick(SPA.jetColors, o.jetColor), (o.jetSup || []).join(', ')].filter(Boolean).join(' · ')], ['תאורה בצדדים', o.lightSides ? String(o.lightSides) : ''],
+      ['אביזרים', (o.acc || []).map(function (a) { return pick(SPA.accessories, a); }).filter(Boolean).join(', ')], ['כתובת', o.address], ['טלפון', o.phone]];
+    return '<dl class="spec">' + rows.filter(function (r) { return r[1]; }).map(function (r) { return '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl>';
+  }
+  function kitDraft(o) { var l = kitBase(o); return l.concat((o.kitExtra || []).map(function (x, i) { return { n: x.n, q: x.q, sku: x.sku || '', extra: i }; })); }
   function skuHtml(x) { return x.sku ? '<span class="sku">מק"ט ' + esc(x.sku) + '</span>' : ''; }
   function kitHtml(o, f) {
     var id = esc(o.id), k = f.s.k, h = '';
-    if (k === 'kitOrder' && isOffice()) {
+    if (k === TR.kitStage && isOffice()) {
       var lines = kitDraft(o);
-      h += '<div class="kitbox"><strong>הזמנת קיט למחסנאי</strong>' + (o.sketch ? '' : '<div class="st">אין שרטוט שמור, אז הרשימה לא נגזרת אוטומטית. מוסיפים פריטים ידנית.</div>') +
+      h += '<div class="kitbox"><strong>הזמנת קיט למחסנאי</strong>' + (o.sketch || kindOf(o) === 'spa' ? '' : '<div class="st">אין שרטוט שמור, אז הרשימה לא נגזרת אוטומטית. מוסיפים פריטים ידנית.</div>') +
         '<ul class="kitlist">' + lines.map(function (x) { return '<li><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + skuHtml(x) + '</span>' + (x.extra != null ? '<button class="btn small danger" type="button" data-kitdel="' + id + '" data-i="' + x.extra + '">הסר</button>' : '') + '</li>'; }).join('') + '</ul>' +
         '<div class="row"><input id="kn-' + id + '" placeholder="פריט נוסף" aria-label="פריט נוסף" autocomplete="off"><input id="ks-' + id + '" class="skuin" inputmode="numeric" placeholder="מק&quot;ט" aria-label="מק&quot;ט" autocomplete="off"><input id="kq-' + id + '" class="qty" inputmode="numeric" value="1" aria-label="כמות"><button class="btn small" type="button" data-kitadd="' + id + '">הוספה</button></div>' + '<div class="row"><button class="btn" type="button" data-kitprint="' + id + '">הורדת PDF / הדפסה</button></div>' + '</div>';
-    } else if (o.kitList && o.kitList.length && IDX[k] >= IDX.kit && IDX[k] <= IDX.fitting) {
-      h += '<div class="kitbox"><strong>' + (k === 'kit' ? 'רשימת הקיט להכנה' : 'הקיט שנשלח') + '</strong>' +
+    } else if (o.kitList && o.kitList.length && IDX[k] >= IDX[TR.kitFrom] && IDX[k] <= IDX[TR.kitTo]) {
+      h += '<div class="kitbox"><strong>' + (k === TR.kitFrom ? 'רשימת הקיט להכנה' : 'הקיט שנשלח') + '</strong>' +
         '<ul class="kitlist">' + o.kitList.map(function (x) { return '<li><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + skuHtml(x) + '</span></li>'; }).join('') + '</ul>' +
         '<div class="row"><button class="btn" type="button" data-kitprint="' + id + '">הורדת PDF / הדפסה</button></div></div>';
     }
@@ -421,10 +507,10 @@
   }
   // A4 sheet of one order's kit, sent to the browser's print dialog (where it can also be saved as PDF)
   function printKit(o) {
-    var lines = o.stage === 'kitOrder' || !(o.kitList && o.kitList.length) ? kitDraft(o) : o.kitList, sk = o.sketch || {};
-    var facts = [['חנות', o.store], ['לקוח', o.customer], ['הזמנה באינטגרל', o.num], ['מספר סידורי', o.tubNum], ['דגם', mname(o.model)], ['מערכת', o.system], ['כיוון', sk.side === 'R' ? 'ימין' : sk.side === 'L' ? 'שמאל' : ''], ['פנס', sk.light === true ? 'יש' : sk.light === false ? 'אין' : ''], ['פאנל', o.panel ? 'כן (מורכב באשדוד)' : 'לא'], ['סוכן', o.agent]].filter(function (f) { return f[1]; });
+    var lines = o.stage === TR.kitStage || !(o.kitList && o.kitList.length) ? kitDraft(o) : o.kitList, sk = o.sketch || {};
+    var facts = kindOf(o) === 'spa' ? [['לקוח', o.customer], ['הזמנה באינטגרל', o.num], ['מספר סידורי', o.tubNum], ['דגם', mname(o.model)], ['איבזור', o.equipName], ['מקום האיבזור', pick(SPA.equipLocs, o.equipLoc)], ['סוכן', o.agent]].filter(function (f) { return f[1]; }) : [['חנות', o.store], ['לקוח', o.customer], ['הזמנה באינטגרל', o.num], ['מספר סידורי', o.tubNum], ['דגם', mname(o.model)], ['מערכת', o.system], ['כיוון', sk.side === 'R' ? 'ימין' : sk.side === 'L' ? 'שמאל' : ''], ['פנס', sk.light === true ? 'יש' : sk.light === false ? 'אין' : ''], ['פאנל', o.panel ? 'כן (מורכב באשדוד)' : 'לא'], ['סוכן', o.agent]].filter(function (f) { return f[1]; });
     var d = new Date(), date = d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
-    $('printArea').innerHTML = '<div class="p-head"><div><div class="p-brand">MTI</div><h1>הזמנת קיט לג\'קוזי</h1></div><div class="p-date">' + date + '</div></div>' +
+    $('printArea').innerHTML = '<div class="p-head"><div><div class="p-brand">MTI</div><h1>הזמנת קיט ל' + (kindOf(o) === 'spa' ? 'ספא' : 'ג\'קוזי') + '</h1></div><div class="p-date">' + date + '</div></div>' +
       '<div class="p-facts">' + facts.map(function (f) { return '<div><span>' + esc(f[0]) + '</span><b>' + esc(f[1]) + '</b></div>'; }).join('') + '</div>' +
       '<table class="p-kit"><thead><tr><th class="c">#</th><th>מק"ט</th><th>פריט</th><th class="c">כמות</th></tr></thead><tbody>' +
       lines.map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="p-sku">' + esc(x.sku || '') + '</td><td>' + esc(x.n) + '</td><td class="c q">' + esc(x.q) + '</td></tr>'; }).join('') + '</tbody></table>' +
@@ -479,13 +565,14 @@
     }
     var b = ev.target.closest('button'); if (!b || b.disabled) return; var d = b.dataset;
     if (d.reload) { hardReload(); return; }
-    if (d.savetub && (o = find(d.savetub))) { var tv = $('tn-' + o.id).value.trim(); if (!/^\d{4}$/.test(tv)) { $('banner').hidden = false; $('banner').textContent = 'מספר סידורי הוא 4 ספרות.'; return; } document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ tubNum: tv }); }); }
+    if (d.savetub && (o = find(d.savetub))) { var tv = $('tn-' + o.id).value.trim(), spaSer = kindOf(o) === 'spa'; if (!(spaSer ? /^\d{1,8}$/ : /^\d{4}$/).test(tv)) { $('banner').hidden = false; $('banner').textContent = spaSer ? 'מספר סידורי הוא ספרות בלבד.' : 'מספר סידורי הוא 4 ספרות.'; return; } document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ tubNum: tv }); }); }
     else if (d.savecontact && (o = find(d.savecontact))) { var P = d.pfx || '', pv = $(P + 'ph-' + o.id).value.trim(), em = $(P + 'em-' + o.id).value.trim(); document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ phone: pv, custEmail: em }); }); }
     else if (d.copy && (o = find(d.copy))) { var link = custLink(o); (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () { b.textContent = 'הקישור הועתק'; }, function () { b.outerHTML = '<input readonly dir="ltr" value="' + esc(link) + '" onfocus="this.select()">'; }); }
+    else if (d.edit && (o = find(d.edit))) { st.editId = o.id; st.form = false; st.usersOpen = false; $('form').innerHTML = ''; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     else if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); }
     else if (d.sketch && (o = find(d.sketch))) { if (o.sketch || canDraw(o)) openSketch(o); }
-    else if (d.next && (o = find(d.next))) { var nx = STAGES[IDX[o.stage] + 1]; if (nx && canAct(STAGES[IDX[o.stage]])) write(o.id, function () {
-      return move(o, nx.k, null, o.stage === 'kitOrder' ? { kitList: kitDraft(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; }) } : null); }); }
+    else if (d.next && (o = find(d.next))) { var nx = nextStage(o); if (nx && canAct(STAGES[IDX[o.stage]])) write(o.id, function () {
+      return move(o, nx.k, null, o.stage === TR.kitStage ? { kitList: kitDraft(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; }) } : null); }); }
     else if (d.kitadd && (o = find(d.kitadd))) { var kn = $('kn-' + o.id).value.trim().slice(0, 80), kq = parseInt($('kq-' + o.id).value, 10) || 1, ks = $('ks-' + o.id).value.trim().slice(0, 20); if (!kn) return; document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ kitExtra: (o.kitExtra || []).concat([{ n: kn, q: kq, sku: ks }]) }); }); }
     else if (d.kitdel && (o = find(d.kitdel))) { var ke = (o.kitExtra || []).slice(); ke.splice(+d.i, 1); write(o.id, function () { return col.doc(o.id).update({ kitExtra: ke }); }); }
     else if (d.kitprint && (o = find(d.kitprint))) printKit(o);
@@ -508,26 +595,53 @@
   });
   $('q').addEventListener('input', function () { st.q = this.value; renderList(new Date()); });
   $('agentSel').addEventListener('change', function () { st.agent = this.value; render(); });
-  $('newBtn').addEventListener('click', function () { st.form = !st.form; st.usersOpen = false; render(); if (st.form) $('nCust').focus(); });
+  $('newBtn').addEventListener('click', function () { st.form = !st.form || !!st.editId; st.editId = null; st.usersOpen = false; $('form').innerHTML = ''; render(); if (st.form) $('nCust').focus(); });
   $('usersBtn').addEventListener('click', function () { st.usersOpen = !st.usersOpen; st.form = false; st.usersDirty = true; render(); });
+  $('form').addEventListener('change', function (ev) {
+    var o = st.editId ? find(st.editId) : null;
+    if (ev.target.id === 'nModel' && st.kind === 'spa') $('nEquip').innerHTML = equipOpts(ev.target.value, '');
+    if (ev.target.id === 'nModel' && st.kind === 'jacuzzi' && o) { var w = $('nWarn'), ch = o.sketch && ev.target.value !== o.model; w.hidden = !ch; w.textContent = ch ? 'שינוי הדגם מוחק את השרטוט הקיים, וצריך לשרטט ולשלוח ללקוח מחדש.' : ''; }
+  });
+  function formValues() {
+    var val = function (id) { var el = $(id); return el ? el.value.trim() : ''; }, on = function (id) { var el = $(id); return !!(el && el.checked); };
+    var agentName = val('nAgent'), ag = users.find(function (u) { return u.role === 'agent' && u.name === agentName; });
+    var d = { num: val('nNum'), customer: val('nCust'), store: val('nStore'), model: val('nModel'), phone: val('nPhone'), notes: val('nNotes'), agent: agentName, agentEmail: ag ? ag.email : '' };
+    if (st.kind === 'spa') {
+      var m = SPA_MODEL[d.model], en = val('nEquip'), eq = m && m.equip.find(function (e) { return e[1] === en; });
+      Object.assign(d, { kind: 'spa', address: val('nAddr'), equipName: en, equip: eq ? eq[0] : '', acrylic: val('nAcrylic'), cabinet: val('nCabinet'), phase: val('nPhase'), install: val('nInstall'),
+        shell: val('nShell'), equipLoc: val('nEquipLoc'), delivery: val('nDelivery'), controller: val('nController'), jetColor: val('nJetColor'), lightSides: parseInt(val('nLights'), 10) || 0,
+        touch4: on('nTouch4'), ozone: on('nOzone'), uv: on('nUv'),
+        jetSup: SPA.jetSuppliers.filter(function (n, k) { return on('nSup' + k); }), acc: SPA.accessories.filter(function (a, k) { return on('nAcc' + k); }).map(function (a) { return a[0]; }) });
+    } else Object.assign(d, { system: val('nSys'), custEmail: val('nEmail'), panel: on('nPanel') });
+    return d;
+  }
   $('form').addEventListener('click', async function (ev) {
-    if (ev.target.id === 'nCancel') { st.form = false; render(); return; }
+    if (ev.target.id === 'nCancel') { st.form = false; st.editId = null; render(); return; }
     if (ev.target.id !== 'nSave') return;
-    var cust = $('nCust').value.trim(), num = $('nNum').value.trim();
-    if (!cust && !num) { $('nErr').textContent = 'צריך לפחות שם לקוח או מספר הזמנה.'; return; }
-    var mdl = MODEL[$('nModel').value]; if (mdl && $('nSys').value === 'TITANIUM' && mdl.jb && !mdl.jt) { $('nErr').textContent = 'לפי הקטלוג אין ל-' + mdl.code + ' מערכת TITANIUM.'; return; }
-    var agentName = $('nAgent').value, ag = users.find(function (u) { return u.role === 'agent' && u.name === agentName; }), ev0 = event('request');
+    var d = formValues(), o = st.editId ? find(st.editId) : null;
+    if (!d.customer && !d.num && !d.store) { $('nErr').textContent = 'צריך לפחות חנות, לקוח או מספר הזמנה.'; return; }
+    var mdl = MODEL[d.model]; if (st.kind === 'jacuzzi' && mdl && d.system === 'TITANIUM' && mdl.jb && !mdl.jt) { $('nErr').textContent = 'לפי הקטלוג אין ל-' + mdl.code + ' מערכת TITANIUM.'; return; }
+    var tub = st.kind === 'spa' && !o ? ($('nTub').value || '').trim() : ''; if (tub && !/^\d{1,8}$/.test(tub)) { $('nErr').textContent = 'מספר סידורי הוא ספרות בלבד.'; return; }
     ev.target.disabled = true;
     try {
-      var order = { num: num, customer: cust, model: $('nModel').value, system: $('nSys').value, panel: $('nPanel').checked, notes: $('nNotes').value.trim(), store: $('nStore').value.trim(), phone: $('nPhone').value.trim(), custEmail: $('nEmail').value.trim(), approvalToken: newToken(),
-        agentEmail: ag ? ag.email : '', agent: agentName, stage: 'request', stageAt: ev0.at, hold: null, history: [ev0], createdAt: ev0.at };
-      // take the next serial and save the order together, so two people opening orders at once never get the same number
-      await db.runTransaction(async function (tx) {
-        var s = await tx.get(counterRef), n = Math.max(s.exists && s.data().serial ? s.data().serial : FIRST_SERIAL, serialFloor());
-        order.tubNum = pad4(n);
-        tx.set(col.doc(), order); tx.set(counterRef, { serial: n + 1 });
-      });
-      st.form = false; render();
+      if (o) { // a changed model makes the old drawing meaningless: drop it and its customer link
+        if (st.kind === 'jacuzzi' && o.sketch && d.model !== o.model) { if (o.approvalToken) apCol.doc(o.approvalToken).delete().catch(function () {}); Object.assign(d, { sketch: null, sketchBlocking: false, approvalToken: newToken(), approvalSentAt: null }); }
+        await col.doc(o.id).update(d);
+      } else {
+        var ev0 = event(st.kind === 'spa' ? 'draft' : 'request');
+        var order = Object.assign(d, { stage: ev0.s, stageAt: ev0.at, hold: null, history: [ev0], createdAt: ev0.at });
+        if (st.kind === 'spa') { order.tubNum = tub; await col.add(order); }
+        else {
+          order.approvalToken = newToken();
+          // take the next serial and save the order together, so two people opening orders at once never get the same number
+          await db.runTransaction(async function (tx) {
+            var s = await tx.get(counterRef), n = Math.max(s.exists && s.data().serial ? s.data().serial : FIRST_SERIAL, serialFloor());
+            order.tubNum = pad4(n);
+            tx.set(col.doc(), order); tx.set(counterRef, { serial: n + 1 });
+          });
+        }
+      }
+      st.form = false; st.editId = null; render();
     } catch (e) { ev.target.disabled = false; $('nErr').textContent = 'ההזמנה לא נשמרה. נסו שוב.'; }
   });
   $('usersPanel').addEventListener('click', async function (ev) {

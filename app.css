@@ -251,3 +251,11 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
   #printArea .p-sketch + table td { font-size: 12pt; }
   #printArea .p-sign { display: flex; justify-content: space-between; margin-top: 28pt; font-size: 11pt; }
 }
+
+/* spa order: specification list and checkbox rows in the form */
+.spec { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: 14px; }
+.spec dt { color: var(--muted); }
+.spec dd { margin: 0; min-width: 0; }
+.form .chkrow { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.form .chkrow .lbl { color: var(--muted); font-size: 13px; flex-basis: 100%; }
+.form .chkrow label.chk { flex: 0 1 auto; }
