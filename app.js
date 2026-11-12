@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-095700';
+  var APP_VERSION = '20261112-100907';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -233,7 +233,21 @@
   if (TOKEN || CUST_PAGE) { customerMode(); return; }
 
   // ---------- sign-in ----------
-  function show(view) { ['loginView', 'noAccessView', 'appView'].forEach(function (v) { $(v).hidden = v !== view; }); }
+  function anonScan(arg) {
+    var s = parseScan('?scan=' + arg), n = new URLSearchParams(location.search).get('n');
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    show('scanView');
+    var box = $('scanResult');
+    if (!s) { box.className = 'scanres bad'; box.innerHTML = '<b>קוד לא מוכר</b><p>זו לא מדבקה של המערכת.</p>'; return; }
+    var what = (s.p === 'kit' ? 'קיט' : 'אמבטיה') + (n ? ' ' + esc(n) : '');
+    box.className = 'scanres'; box.innerHTML = '<b>שומר…</b>';
+    scanQ.add({ o: s.id, p: s.p, at: firebase.firestore.FieldValue.serverTimestamp(), done: false }).then(function () {
+      box.className = 'scanres ok'; box.innerHTML = '<div class="big">✓</div><b>' + what + '</b><p>נרשם: עלה על המשאית.</p><p class="who">אפשר לסגור את הדף ולסרוק את המדבקה הבאה.</p>';
+      try { var C = window.AudioContext || window.webkitAudioContext, ac = new C(), os = ac.createOscillator(); os.frequency.value = 1200; os.connect(ac.destination); os.start(); os.stop(ac.currentTime + 0.12); } catch (e) {}
+    }, function () { box.className = 'scanres bad'; box.innerHTML = '<b>הסריקה לא נשמרה</b><p>בדקו שיש אינטרנט ונסו לסרוק שוב.</p>'; });
+  }
+  function show(view) { ['loginView', 'noAccessView', 'appView', 'scanView'].forEach(function (v) { $(v).hidden = v !== view; }); }
+  $('scanLoginBtn').addEventListener('click', function () { show('loginView'); $('loginBtn').click(); });
   $('loginBtn').addEventListener('click', async function () {
     $('loginErr').textContent = '';
     var provider = new firebase.auth.GoogleAuthProvider(); provider.setCustomParameters({ prompt: 'select_account' });
@@ -250,7 +264,7 @@
 
   auth.onAuthStateChanged(async function (u) {
     unsub.forEach(function (x) { x(); }); unsub = []; me = null;
-    if (!u) { show('loginView'); return; }
+    if (!u) { if (SCAN_ARG && !st.scanDone) { st.scanDone = true; anonScan(SCAN_ARG); return; } show('loginView'); return; }
     var email = (u.email || '').toLowerCase(), ref = usersCol.doc(email);
     try {
       var snap = await ref.get();
@@ -279,6 +293,7 @@
       if (isOffice()) snap.docs.forEach(function (d) { var a = d.data(); if (a.status === 'approved' && a.orderId) autoApprove(a.orderId, d.id, a); });
       render();
     }, function () {}));
+    if (me.role !== 'agent') unsub.push(scanQ.where('done', '==', false).onSnapshot(function (snap) { if (st.loaded) processQueue(snap); else setTimeout(function () { processQueue(snap); }, 2500); }, function () {}));
     if (isOffice()) unsub.push(counterRef.onSnapshot(function (s) { var d = s.exists ? s.data() : null; st.nextSerial = d && d.serial ? d.serial : FIRST_SERIAL; showSerial(); }, function () {}));
     if (isOffice()) unsub.push(usersCol.onSnapshot(function (snap) { users = snap.docs.map(function (d) { return Object.assign({ email: d.id }, d.data()); }); st.usersDirty = true; render(); }, function () {}));
     render();
@@ -677,7 +692,7 @@
   var SCAN_BASE = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
   var SCAN_ARG = new URLSearchParams(location.search).get('scan');
   var PART = { t: 'tub', k: 'kit' }, PART_N = { tub: 'אמבטיה', kit: 'קיט' };
-  function scanUrl(o, p) { return SCAN_BASE + '?scan=' + encodeURIComponent(o.id) + '.' + (p === 'kit' ? 'k' : 't'); }
+  function scanUrl(o, p) { return SCAN_BASE + '?scan=' + encodeURIComponent(o.id) + '.' + (p === 'kit' ? 'k' : 't') + (o.tubNum ? '&n=' + encodeURIComponent(o.tubNum) : ''); }
   function parseScan(text) {
     var m = /[?&]scan=([^&#]+)/.exec(String(text || '')) || /^([A-Za-z0-9_-]+)\.([tk])$/.exec(String(text || '').trim());
     if (!m) return null; var v = decodeURIComponent(m[2] ? m[1] + '.' + m[2] : m[1]), i = v.lastIndexOf('.');
@@ -709,10 +724,10 @@
     return 'אין מה לעדכן. ההזמנה בשלב "' + (STAGES[IDX[o.stage]] || { n: o.stage }).n + '"' + (loc ? ', ה' + PART_N[p] + ' ' + LOC_N[loc.at] : '') + '.';
   }
   // apply one action; returns a promise of the previous values, for undo
-  function scanApply(o, p, k) {
+  function scanApply(o, p, k, who) {
     var L = { loadB: 'truckB', atB: 'barkan', loadA: 'truckA', atA: 'ashdod' }[k], u = {}, to = null, note = '';
-    u[p + 'Loc'] = locMark(L);
-    if (k === 'loadB' && p === 'tub' && o.tubMissing && !o.tubMissing.sentAt) u.tubMissing = Object.assign({}, o.tubMissing, { sentAt: u.tubLoc.t, sentBy: me.email, sentName: me.name || me.email });
+    u[p + 'Loc'] = who ? { at: L, t: who.t, by: '', byName: who.name } : locMark(L);
+    if (k === 'loadB' && p === 'tub' && o.tubMissing && !o.tubMissing.sentAt) u.tubMissing = Object.assign({}, o.tubMissing, { sentAt: u.tubLoc.t, sentBy: who ? '' : me.email, sentName: who ? who.name : me.name || me.email });
     if (k === 'loadB' && p === 'kit' && o.stage === 'kit') { to = 'toBarkan'; note = 'הקיט נסרק בעלייה למשאית'; }
     if (k === 'atB') {
       u[p === 'tub' ? 'rcvTub' : 'rcvKit'] = rcvMark(); if (p === 'tub') u.tubMissing = null;
@@ -722,12 +737,31 @@
     }
     if (k === 'loadA') { to = 'toAshdod'; note = 'נסרק בעלייה למשאית' + (o.stage === 'fitting' ? ' (האיבזור הסתיים)' : ''); }
     if (k === 'atA') { to = 'inspect'; note = 'נסרק בהגעה לאשדוד'; }
-    var ev = { p: p, k: k, at: u[p + 'Loc'].t, by: me.email, byName: me.name || me.email };
+    var ev = { p: p, k: k, at: u[p + 'Loc'].t, by: who ? '' : me.email, byName: who ? who.name : me.name || me.email };
     u.scans = (o.scans || []).concat([ev]).slice(-40);
     if (to && o.stage === 'kit') u.kitList = kitNow(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; });
-    if (to) { var e2 = event(to, note); u.stage = to; u.stageAt = e2.at; u.hold = null; u.history = (o.history || []).concat([e2]); }
+    if (to) { var e2 = event(to, note); if (who) { e2.at = who.t; e2.by = ''; e2.byName = who.name; } u.stage = to; u.stageAt = e2.at; u.hold = null; u.history = (o.history || []).concat([e2]); }
     var prev = {}; Object.keys(u).forEach(function (key) { prev[key] = o[key] === undefined ? null : o[key]; });
     return col.doc(o.id).update(u).then(function () { return prev; });
+  }
+  // Loaders scan without an account: the phone only drops a note in scans/ (it cannot read or change orders).
+  // Any open staff screen picks the note up and records "loaded on the truck" on the order, as the driver would.
+  var scanQ = db.collection('scans'), qBusy = {};
+  function processQueue(snap) {
+    snap.docs.forEach(function (d) {
+      var q = d.data(); if (q.done || qBusy[d.id]) return; qBusy[d.id] = true;
+      var ref = scanQ.doc(d.id);
+      db.runTransaction(function (tx) { return tx.get(ref).then(function (x) { if (!x.exists || x.data().done) return false; tx.update(ref, { done: true, by: me.email }); return true; }); })
+        .then(function (mine) {
+          if (!mine) return;
+          var o = st.all.find(function (x) { return x.id === q.o; }), res = 'ההזמנה לא נמצאה';
+          var at = q.at && q.at.toDate ? q.at.toDate().toISOString() : new Date().toISOString();
+          if (o) { var act = scanActs(o, q.p).filter(function (a) { return a.who.indexOf('driver') > -1; })[0];
+            if (act) { res = act.n; return scanApply(o, q.p, act.k, { t: at, name: 'מעמיס (סריקה בלי חשבון)' }).then(function () { return ref.update({ result: res }); }); }
+            res = 'לא עודכן: ' + scanState(o, q.p); }
+          return ref.update({ result: res });
+        }).catch(function () { qBusy[d.id] = false; });
+    });
   }
   // the scan screen: what happened, with undo; on a phone with a camera it keeps scanning
   var scanUi = { open: false, rows: [], cam: null, last: {} };

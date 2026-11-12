@@ -364,3 +364,9 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 @media print { #printArea .stk-side { margin-top: 2mm; font-size: 20pt; font-weight: 800; border: 1.5mm solid #000; padding: 0 5mm; border-radius: 2mm; } }
 @media print { #printArea .stk > * { flex-shrink: 0; } #printArea .stk-qr { width: 64mm; height: 64mm; } #printArea .stk-num { font-size: 58pt; } }
 .scanhint { border: 1.5px dashed var(--line); border-radius: 10px; padding: 10px 12px; font-size: 15px; color: var(--ink); background: var(--surface); }
+/* a loader's phone, scanning without an account */
+.scanres { border-radius: 14px; padding: 18px; margin: 14px 0; border: 2px solid var(--line); text-align: center; font-size: 18px; }
+.scanres b { font-size: 22px; }
+.scanres .big { font-size: 64px; line-height: 1; color: var(--ok); }
+.scanres.ok { border-color: var(--ok); background: var(--ok-bg); }
+.scanres.bad { border-color: var(--bad); background: var(--bad-bg); }
