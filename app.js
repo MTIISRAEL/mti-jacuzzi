@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-095120';
+  var APP_VERSION = '20261112-095347';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -19,6 +19,12 @@
     { k: 'delivered',  n: 'סופק',                 loc: 'done', who: '',            roles: [],                                t: 0, done: '' }
   ];
   // stages that were merged on 12 Nov 2026: an order still standing on one is read as standing on the merged stage
+  var SCAN_HINT = {
+    kit: 'עובר לבד כשהנהג סורק את מדבקת הקיט בעלייה למשאית.',
+    toBarkan: 'עובר לאיבזור כשבברקן סורקים את מדבקת האמבטיה ואת מדבקת הקיט.',
+    loadBk: 'עובר לבד כשהנהג סורק את מדבקת האמבטיה בעלייה למשאית.',
+    toAshdod: 'עובר לבדיקה כשבאשדוד סורקים את מדבקת האמבטיה בירידה מהמשאית.'
+  };
   var J_OLD = { request: 'drawing', kitOrder: 'kit', waitBarkan: 'fitting', pack: 'inspect' };
   var J_OLD_N = { request: 'בקשת אספקה', kitOrder: 'הזמנת קיט למחסן', waitBarkan: 'ממתין לאיבזור בברקן', pack: 'אריזה מחדש' };
   // Spa and swim spa: the 15 stations of the older spa system. Kobi (an admin) signs off the technical review.
@@ -385,7 +391,10 @@
       h += '<div class="who">מי מעדכן עכשיו: ' + (missOpen(o) && !tubSent(o) ? 'משרד / מחסן אשדוד: לשלוח את האמבטיה לברקן' : f.s.who) + '</div>';
       if (f.hold) h += '<button class="btn primary big" type="button" data-unhold="' + id + '"' + busy + '>העיכוב הוסר, ממשיכים</button>';
       else {
-        if (canAct(f.s) && !(f.s.k === 'toBarkan' && kindOf(o) === 'jacuzzi' && !(o.rcvTub && o.rcvKit))) {
+        // jacuzzi stages that only a sticker scan closes: no button, just say what moves it on
+        var scanHint = kindOf(o) === 'jacuzzi' && SCAN_HINT[f.s.k];
+        if (scanHint && !(f.s.k === 'toBarkan' && o.rcvTub && o.rcvKit)) h += '<div class="scanhint">📷 ' + scanHint + '</div>';
+        else if (canAct(f.s)) {
           var blockTxt = '';
           if (f.s.k === TR.kitStage && !kitNow(o).length) blockTxt = 'הרשימה ריקה. מוסיפים לפחות פריט אחד.';
           if (f.s.k === 'tech' && (!o.shell || !o.equipLoc || !o.install)) blockTxt = 'לפני האישור בוחרים סוג התקנה, מקור קליפה ומקום איבזור (בעריכת פרטי ההזמנה).';
