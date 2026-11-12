@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-111952';
+  var APP_VERSION = '20261112-141328';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -242,7 +242,7 @@
     var what = (s.p === 'kit' ? 'קיט' : 'אמבטיה') + (n ? ' ' + esc(n) : '');
     box.className = 'scanres'; box.innerHTML = '<b>שומר…</b>';
     scanQ.add({ o: s.id, p: s.p, at: firebase.firestore.FieldValue.serverTimestamp(), done: false }).then(function () {
-      box.className = 'scanres ok'; box.innerHTML = '<div class="big">✓</div><b>' + what + '</b><p>נרשם: עלה על המשאית.</p><p class="who">אפשר לסגור את הדף ולסרוק את המדבקה הבאה.</p>';
+      box.className = 'scanres ok'; box.innerHTML = '<div class="big">✓</div><b>' + what + '</b><p>הסריקה נרשמה במערכת.</p><p class="who">אפשר לסגור את הדף ולסרוק את המדבקה הבאה.</p>';
       try { var C = window.AudioContext || window.webkitAudioContext, ac = new C(), os = ac.createOscillator(); os.frequency.value = 1200; os.connect(ac.destination); os.start(); os.stop(ac.currentTime + 0.12); } catch (e) {}
     }, function () { box.className = 'scanres bad'; box.innerHTML = '<b>הסריקה לא נשמרה</b><p>בדקו שיש אינטרנט ונסו לסרוק שוב.</p>'; });
   }
@@ -711,8 +711,8 @@
         if (!loc || loc.at !== 'truckB') a.push({ k: 'loadB', who: ['driver'], n: 'עלתה על המשאית לברקן' });
         a.push({ k: 'atB', who: ['barkan'], n: 'הגיעה לברקן' });
       }
-      if (o.stage === 'fitting' || o.stage === 'loadBk') a.push({ k: 'loadA', who: ['driver'], n: "הג'קוזי עלה על המשאית לאשדוד" });
-      if (o.stage === 'toAshdod') a.push({ k: 'atA', who: ['warehouse'], n: "הג'קוזי הגיע לאשדוד" });
+      if (o.stage === 'fitting' || o.stage === 'loadBk') a.push({ k: 'loadA', who: ['driver', 'barkan'], n: "הג'קוזי עלה על המשאית לאשדוד" });
+      if (o.stage === 'toAshdod') a.push({ k: 'atA', who: ['warehouse', 'driver'], n: "הג'קוזי הגיע לאשדוד" });
     } else if (!o.rcvKit && (o.stage === 'kit' || o.stage === 'toBarkan')) {
       if (!loc || loc.at !== 'truckB') a.push({ k: 'loadB', who: ['driver'], n: 'הקיט עלה על המשאית לברקן' });
       a.push({ k: 'atB', who: ['barkan'], n: 'הקיט הגיע לברקן' });
