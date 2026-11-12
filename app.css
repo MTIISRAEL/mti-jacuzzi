@@ -299,3 +299,9 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 .modal-card .row .btn { flex: 1 1 auto; }
 .cf-step { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--bg); border-radius: 10px; padding: 8px 10px; }
 .cf-step span { color: var(--muted); }
+/* receiving at Barkan: the tub and the kit are marked separately */
+.rcvbox { display: flex; flex-direction: column; gap: 8px; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px; }
+.rcvbox h2 { margin: 0; }
+.rcv-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 44px; }
+.rcv-row strong { min-width: 64px; }
+.rcv-ok { color: var(--ok); font-weight: 600; }

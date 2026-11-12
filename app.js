@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261111-133350';
+  var APP_VERSION = '20261112-070638';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -342,6 +342,7 @@
     var ca = custAnswer(o);
     if (ca && ca.status === 'changes') chips += '<span class="chip hold">הלקוח ביקש שינוי</span>';
     else if (o.stage === 'approval' && o.approvalSentAt) chips += '<span class="chip">נשלח ללקוח</span>';
+    chips += rcvChip(o);
     var eta = del ? 'סופק ב-' + fmt(o.stageAt) : f.hold ? 'אספקה צפויה: לא ידוע עד שהעיכוב יוסר'
       : 'בשלב הזה ' + dayWord(f.el) + ' · אספקה צפויה יום ' + DAYS[f.eta.getDay()] + "' " + pad(f.eta.getDate()) + '/' + pad(f.eta.getMonth() + 1);
     var meta = (kindOf(o) === 'spa' ? [mname(o.model), o.equipName, o.acrylic ? 'אקריל ' + pick(SPA.acrylics, o.acrylic) : '', o.cabinet ? 'חיפוי ' + pick(SPA.cabinets, o.cabinet) : '']
@@ -371,11 +372,12 @@
     h += sendBox(o, '');
     if (f.unknown) return h + '<div class="issue warn">המסך הזה פועל בגרסה ישנה ולא מכיר את השלב של ההזמנה. <button class="btn small" type="button" data-reload="1">רענון</button></div></div>';
     if (!del) h += kitHtml(o, f);
+    h += rcvHtml(o);
     if (!del && canWrite()) {
       h += '<div class="who">מי מעדכן עכשיו: ' + f.s.who + '</div>';
       if (f.hold) h += '<button class="btn primary big" type="button" data-unhold="' + id + '"' + busy + '>העיכוב הוסר, ממשיכים</button>';
       else {
-        if (canAct(f.s)) {
+        if (canAct(f.s) && !(f.s.k === 'toBarkan' && kindOf(o) === 'jacuzzi' && !(o.rcvTub && o.rcvKit))) {
           var blockTxt = '';
           if (f.s.k === TR.kitStage && !kitDraft(o).length) blockTxt = 'הרשימה ריקה. מוסיפים לפחות פריט אחד.';
           if (f.s.k === 'tech' && (!o.shell || !o.equipLoc || !o.install)) blockTxt = 'לפני האישור בוחרים סוג התקנה, מקור קליפה ומקום איבזור (בעריכת פרטי ההזמנה).';
@@ -533,6 +535,31 @@
     if (failed) { $('banner').hidden = false; $('banner').textContent = 'העדכון לא נשמר. ייתכן שאין הרשאה או שאין חיבור. נסו שוב.'; }
   }
   function event(key, note) { var ev = { s: key, at: new Date().toISOString(), by: me.email, byName: me.name || me.email }; if (note) ev.note = note; return ev; }
+  // Receiving at Barkan is two separate things: the tub and the kit. Either may come first, and the tub may arrive
+  // before the kit is ready. The order leaves "on the way to Barkan" only when both are there.
+  function rcvOn(o) { return kindOf(o) === 'jacuzzi' && o.stage !== 'delivered' && IDX[o.stage] <= IDX.toBarkan; }
+  function rcvMark() { return { at: new Date().toISOString(), by: me.email, byName: me.name || me.email }; }
+  function rcvChip(o) {
+    if (!rcvOn(o) || (!o.rcvTub && !o.rcvKit && o.stage !== 'toBarkan')) return '';
+    var got = [o.rcvTub ? (o.rcvTub.stock ? 'אמבטיה מהמלאי' : 'אמבטיה') : '', o.rcvKit ? 'קיט' : ''].filter(Boolean), miss = [o.rcvTub ? '' : 'אמבטיה', o.rcvKit ? '' : 'קיט'].filter(Boolean);
+    return (got.length ? '<span class="chip ok">בברקן: ' + got.join(' + ') + '</span>' : '') + (o.stage === 'toBarkan' && miss.length ? '<span class="chip">עוד לא בברקן: ' + miss.join(' + ') + '</span>' : '');
+  }
+  function rcvHtml(o) {
+    if (!rcvOn(o)) return '';
+    var id = esc(o.id), can = canWrite() && canAct(STAGES[IDX.toBarkan]), busy = st.busy[o.id] ? ' disabled' : '', kitOut = IDX[o.stage] >= IDX.toBarkan;
+    function row(key, label, btn, wait) {
+      var r = o[key], v;
+      if (r) v = '<span class="rcv-ok">✓ ' + (r.fix ? 'לא נדרש (חזרה לתיקון)' : (r.stock ? 'מהמלאי בברקן' : key === 'rcvTub' ? 'התקבלה מאשדוד' : 'התקבל') + ' · ' + fmt(r.at) + (r.byName ? ' · ' + esc(r.byName) : '')) + '</span>' + (can && !r.fix ? ' <button class="btn small" type="button" data-rcvundo="' + id + '" data-part="' + key + '"' + busy + '>ביטול</button>' : '');
+      else if (wait) v = '<span class="who">' + wait + '</span>';
+      else v = can ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '"' + busy + '>' + btn + '</button>' +
+        (key === 'rcvTub' ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '" data-stock="1"' + busy + '>יש במלאי בברקן</button>' : '') : '<span class="who">עוד לא התקבל</span>';
+      return '<div class="rcv-row"><strong>' + label + '</strong>' + v + '</div>';
+    }
+    return '<div class="rcvbox"><h2>קבלה בברקן</h2>' +
+      row('rcvTub', 'אמבטיה', 'התקבלה מאשדוד', '') +
+      row('rcvKit', 'קיט', 'הקיט התקבל בברקן', kitOut ? '' : 'הקיט עוד באשדוד') +
+      '<div class="who">ההזמנה עוברת ל"ממתין לאיבזור" כשגם האמבטיה וגם הקיט בברקן.</div></div>';
+  }
   function move(o, key, note, extra) { var ev = event(key, note), u = { stage: key, stageAt: ev.at, hold: null, history: (o.history || []).concat([ev]) }; if (extra) Object.keys(extra).forEach(function (k) { u[k] = extra[k]; }); return col.doc(o.id).update(u); }
   // Kit order: what the warehouse has to pick. Until the office hands it over it follows the drawing plus lines the
   // office added by hand; at hand-over it is frozen into o.kitList, where the warehouse ticks each line.
@@ -688,13 +715,22 @@
     })(o, nx, cur); }
     else if (d.kitadd && (o = find(d.kitadd))) { var kn = $('kn-' + o.id).value.trim().slice(0, 80), kq = parseInt($('kq-' + o.id).value, 10) || 1, ks = $('ks-' + o.id).value.trim().slice(0, 20); if (!kn) return; document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ kitExtra: (o.kitExtra || []).concat([{ n: kn, q: kq, sku: ks }]) }); }); }
     else if (d.kitdel && (o = find(d.kitdel))) { var ke = (o.kitExtra || []).slice(); ke.splice(+d.i, 1); write(o.id, function () { return col.doc(o.id).update({ kitExtra: ke }); }); }
+    else if (d.rcv && (o = find(d.rcv))) (function (o, part, stock) {
+      var other = part === 'rcvTub' ? 'rcvKit' : 'rcvTub', what = part === 'rcvTub' ? 'האמבטיה' : 'הקיט', both = !!o[other] && o.stage === 'toBarkan';
+      ask(stock ? 'לקחת אמבטיה מהמלאי בברקן?' : part === 'rcvTub' ? 'האמבטיה התקבלה מאשדוד?' : 'הקיט התקבל בברקן?', orderLine(o) + (both ? stepLine(STAGES[IDX.toBarkan].n, STAGES[IDX.waitBarkan].n) + '<div class="who">גם ' + (part === 'rcvTub' ? 'הקיט' : 'האמבטיה') + ' כבר בברקן, אז ההזמנה עוברת לאיבזור.</div>' : '<div class="who">' + (o[other] ? '' : 'עדיין מחכים ל' + (part === 'rcvTub' ? 'קיט' : 'אמבטיה') + '.') + '</div>') + (stock ? '<div class="who">לא צריך לשלוח אמבטיה מאשדוד.</div>' : ''), stock ? 'כן, יש במלאי' : 'כן, התקבל').then(function (ok) {
+        if (!ok) return; var x = {}; x[part] = rcvMark(); if (stock) x[part].stock = true;
+        write(o.id, function () { return both ? move(o, 'waitBarkan', (stock || (o.rcvTub && o.rcvTub.stock) ? 'אמבטיה מהמלאי בברקן, הקיט התקבל' : 'האמבטיה והקיט התקבלו בברקן'), x) : col.doc(o.id).update(x); }); });
+    })(o, d.part, !!d.stock);
+    else if (d.rcvundo && (o = find(d.rcvundo))) (function (o, part) {
+      ask('ביטול הקבלה', orderLine(o) + '<p>' + (part === 'rcvTub' ? 'האמבטיה' : 'הקיט') + ' יסומן שוב כ"עוד לא התקבל".</p>', 'כן, לבטל').then(function (ok) { if (!ok) return; var x = {}; x[part] = null; write(o.id, function () { return col.doc(o.id).update(x); }); });
+    })(o, d.part);
     else if (d.kitprint && (o = find(d.kitprint))) printKit(o);
     else if (d.skprint && (o = find(d.skprint))) printSketch(o);
     else if (d.skipappr && (o = find(d.skipappr))) (function (o) { ask('דילוג על אישור הלקוח', orderLine(o) + stepLine(STAGES[IDX[o.stage]].n, STAGES[IDX.kitOrder].n) +
       '<p>משתמשים בזה רק כשהלקוח כבר אישר סקיצה עם ההזמנה. לא יישלח קישור לאישור, ובהיסטוריה יירשם שהאישור דולג.</p>' + (o.sketch ? '' : '<p class="who">אין שרטוט במערכת: את רשימת הקיט ממלאים ידנית.</p>'), 'כן, לדלג ולעבור להזמנת קיט').then(function (ok) {
       if (ok) write(o.id, function () { return move(o, 'kitOrder', 'דילוג על אישור הלקוח: סקיצה מאושרת בהזמנה'); }); }); })(o);
     else if (d.fail && (o = find(d.fail))) (function (o) { ask('הבדיקה נכשלה?', orderLine(o) + stepLine(STAGES[IDX[o.stage]].n, STAGES[IDX.toBarkan].n) + '<p>הג\'קוזי חוזר לברקן לתיקון.</p>', 'כן, להחזיר לברקן', true).then(function (ok) {
-      if (ok) write(o.id, function () { return move(o, 'toBarkan', 'הבדיקה נכשלה, חוזר לברקן'); }); }); })(o);
+      if (ok) write(o.id, function () { var k = rcvMark(); k.fix = true; return move(o, 'toBarkan', 'הבדיקה נכשלה, חוזר לברקן', { rcvTub: null, rcvKit: k }); }); }); })(o);
     else if (d.holdopen) { st.holdFor = d.holdopen; render(); }
     else if (d.hold && (o = find(d.hold))) {
       var reason = d.reason || (($('holdTxt') || {}).value || '').trim(); if (!reason) return;
@@ -703,7 +739,7 @@
     else if (d.unhold && (o = find(d.unhold))) write(o.id, function () { return col.doc(o.id).update({ hold: null }); });
     else if (d.undo && (o = find(d.undo))) (function (o) { var hs = (o.history || []).slice(0, -1), last = hs[hs.length - 1]; if (!last) return;
       ask('חזרה שלב אחד', orderLine(o) + stepLine(STAGES[IDX[o.stage]] ? STAGES[IDX[o.stage]].n : o.stage, (STAGES[IDX[last.s]] || { n: last.s }).n) + '<p>העדכון האחרון בהיסטוריה יימחק.</p>', 'כן, לחזור שלב').then(function (ok) {
-      if (ok) write(o.id, function () { return col.doc(o.id).update({ stage: last.s, stageAt: last.at, history: hs }); }); }); })(o);
+      if (ok) write(o.id, function () { var u = { stage: last.s, stageAt: last.at, history: hs }; if (kindOf(o) === 'jacuzzi' && IDX[last.s] < IDX.toBarkan && o.rcvKit) u.rcvKit = null; return col.doc(o.id).update(u); }); }); })(o);
     else if (d.del && (o = find(d.del))) (function (o) { ask('מחיקת ההזמנה', orderLine(o) + '<p>ההזמנה, השרטוט וההיסטוריה שלה יימחקו לגמרי. אי אפשר לשחזר.</p>', 'כן, למחוק לצמיתות', true).then(function (ok) {
       if (ok) { if (st.openId === o.id) st.openId = null; write(o.id, function () { if (o.approvalToken) apCol.doc(o.approvalToken).delete().catch(function () {}); return col.doc(o.id).delete(); }); } }); })(o);
   }
