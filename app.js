@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-100907';
+  var APP_VERSION = '20261112-102410';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -260,6 +260,7 @@
   });
   function logout() { unsub.forEach(function (u) { u(); }); unsub = []; me = null; auth.signOut(); }
   $('scanBtn').addEventListener('click', function () { openScanner(); });
+  $('loadListBtn').addEventListener('click', printLoadList);
   $('logoutBtn').addEventListener('click', logout); $('logoutBtn2').addEventListener('click', logout);
 
   auth.onAuthStateChanged(async function (u) {
@@ -551,7 +552,7 @@
     if (a && ($('list').contains(a) || $('side').contains(a) || $('usersPanel').contains(a) || ($('sketchView').querySelector('#skExtra') || $('list')).contains(a)) && (a.tagName === 'INPUT')) { pending = true; return; }
     pending = false;
     var now = new Date();
-    $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); $('scanBtn').hidden = me.role === 'agent'; $('scanBtn').className = 'btn ' + (me.role === 'driver' || me.role === 'barkan' ? 'primary' : 'small'); applyKind();
+    $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); $('scanBtn').hidden = me.role === 'agent'; $('loadListBtn').hidden = !isOffice(); $('scanBtn').className = 'btn ' + (me.role === 'driver' || me.role === 'barkan' ? 'primary' : 'small'); applyKind();
     $('banner').hidden = me.role !== 'agent'; if (me.role === 'agent') $('banner').textContent = 'תצוגה בלבד: כאן רואים איפה כל ' + TR.word + ' של הלקוחות שלך ומתי הוא צפוי לרדת.';
     renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderAlerts(); renderList(now); renderSide(now); refreshSketchSend();
     $('foot').textContent = st.loaded ? 'ימי עבודה: א\'–ה\'. חריגה מסומנת כשהזמנה נשארת בשלב יותר מהזמן שהוקצב לו.' : '';
@@ -844,6 +845,30 @@
     return '<div class="alert truck"><strong>על המשאית עכשיו (' + t.length + ')</strong><ul>' + t.map(function (x) {
       var late = (Date.now() - new Date(x.l.t)) > 20 * 3600 * 1000;
       return '<li><button type="button" class="alink" data-open="' + esc(x.o.id) + '">' + PART_N[x.p] + (x.o.tubNum ? ' ' + esc(x.o.tubNum) : '') + ' · ' + esc(titleOf(x.o)) + ' · ' + esc(omodel(x.o)) + '</button> <span class="who">' + (x.l.at === 'truckB' ? 'לברקן' : 'לאשדוד') + ' · עלה ' + fmt(x.l.t) + (x.l.byName ? ' · ' + esc(x.l.byName) : '') + '</span>' + (late ? ' <span class="chip hold">עלה ולא נסרק בירידה</span>' : '') + '</li>'; }).join('') + '</ul></div>';
+  }
+  // today's loading list for the office, to key the delivery note into Integral: what was scanned onto a truck today
+  function printLoadList() {
+    var d = new Date(), day = d.toDateString(), groups = {};
+    st.all.forEach(function (o) {
+      if (kindOf(o) !== 'jacuzzi') return;
+      (o.scans || []).forEach(function (ev) {
+        if ((ev.k !== 'loadB' && ev.k !== 'loadA') || new Date(ev.at).toDateString() !== day) return;
+        var key = o.id + '|' + ev.k, g = groups[key] || (groups[key] = { o: o, dir: ev.k, parts: {}, at: ev.at, who: {} });
+        g.parts[ev.p] = true; if (ev.at > g.at) g.at = ev.at; if (ev.byName) g.who[ev.byName] = true;
+      });
+    });
+    var list = Object.keys(groups).map(function (k) { return groups[k]; }).sort(function (a, b) { return a.at < b.at ? -1 : 1; });
+    function hm(iso) { var t = new Date(iso); return pad(t.getHours()) + ':' + pad(t.getMinutes()); }
+    function table(dir, title) {
+      var rows = list.filter(function (g) { return g.dir === dir; }); if (!rows.length) return '';
+      return '<h2 class="p-sec">' + title + ' (' + rows.length + ')</h2><table class="p-kit"><thead><tr><th class="c">#</th><th>הזמנה באינטגרל</th><th>מס\' סידורי</th><th>דגם</th><th>מה עלה</th><th class="c">שעה</th></tr></thead><tbody>' +
+        rows.map(function (g, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="p-sku">' + esc(g.o.num || '—') + '</td><td class="q">' + esc(g.o.tubNum || '—') + '</td><td>' + esc(omodel(g.o)) + '</td><td><b>' + [g.parts.tub ? (dir === 'loadA' ? "ג'קוזי מאובזר" : 'אמבטיה') : '', g.parts.kit ? 'קיט' : ''].filter(Boolean).join(' + ') + '</b></td><td class="c">' + hm(g.at) + '</td></tr>'; }).join('') + '</tbody></table>';
+    }
+    var date = d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
+    $('printArea').innerHTML = '<div class="p-head"><div><div class="p-brand">MTI</div><h1>רשימת העמסה · לתעודת משלוח</h1></div><div class="p-date">' + date + '</div></div>' +
+      (list.length ? table('loadB', 'אשדוד ← ברקן') + table('loadA', 'ברקן ← אשדוד') : '<p>היום עוד לא נסרק שום דבר בעלייה למשאית.</p>') +
+      '<p class="p-notes">לפי הסריקות של היום עד ' + hm(d.toISOString()) + '.</p>';
+    var t = document.title; document.title = 'רשימת העמסה ' + date; window.print(); document.title = t;
   }
   // stickers: 100 x 150 mm, portrait, one per page
   function stickerHtml(o, p) {

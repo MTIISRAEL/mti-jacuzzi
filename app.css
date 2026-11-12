@@ -370,3 +370,4 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 .scanres .big { font-size: 64px; line-height: 1; color: var(--ok); }
 .scanres.ok { border-color: var(--ok); background: var(--ok-bg); }
 .scanres.bad { border-color: var(--bad); background: var(--bad-bg); }
+@media print { #printArea .p-sec { font-size: 14pt; margin: 12pt 0 6pt; } }
