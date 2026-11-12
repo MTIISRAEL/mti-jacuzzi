@@ -244,6 +244,9 @@ window.Sketch = (function () {
           o += '<g class="it" data-id="' + it.id + '" transform="' + tf(it) + '">' + hit(it) + ringFor(it) + symbol(it) + '</g>';
         });
       svg.innerHTML = o;
+      // the tub picture sometimes fails to load (a dropped connection, a stale cache): try once more without the cache
+      var im = svg.querySelector('image');
+      if (im) im.addEventListener('error', function () { if (im.dataset.retry) return; im.dataset.retry = '1'; var h = im.getAttribute('href').split('?')[0]; setTimeout(function () { im.setAttribute('href', h + '?t=' + Date.now()); }, 600); });
     }
     function where(it) {
       if (it.type === 'service') return 'בצד ה' + SIDES[it.side] + ' · מרכז הפתח ' + ((it.side === 'top' || it.side === 'bottom') ? r1(it.x) + ' ' + CM + ' מהקצה השמאלי' : r1(it.y) + ' ' + CM + ' מהדופן האחורית');
