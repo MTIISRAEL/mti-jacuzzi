@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-095347';
+  var APP_VERSION = '20261112-095501';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -9,7 +9,7 @@
   var J_STAGES = [
     { k: 'drawing',    n: 'שרטוט',                 loc: 'a1',   who: 'משרד',        roles: ['office'],                        t: 1, done: 'השרטוט נשלח ללקוח' },
     { k: 'approval',   n: 'ממתין לאישור לקוח',    loc: 'a1',   who: 'משרד',        roles: ['office'],                        t: 3, done: 'הלקוח אישר את השרטוט' },
-    { k: 'kit',        n: 'הכנת קיט במחסן',       loc: 'a1',   who: 'מחסן אשדוד',  roles: ['warehouse'],                     t: 1, done: 'הקיט מוכן והועמס לברקן' },
+    { k: 'kit',        n: 'קיט בהכנה',            loc: 'a1',   who: 'מחסן אשדוד',  roles: ['warehouse'],                     t: 1, done: 'הקיט מוכן והועמס לברקן' },
     { k: 'toBarkan',   n: 'בדרך לברקן',           loc: 'road', who: 'מנהל ברקן',   roles: ['barkan', 'driver'],              t: 1, done: 'התקבל בברקן' },
     { k: 'fitting',    n: 'באיבזור בברקן',        loc: 'bk',   who: 'מנהל ברקן',   roles: ['barkan'],                        t: 4, done: 'האיבזור הסתיים' },
     { k: 'loadBk',     n: 'מוכן להעמסה בברקן',     loc: 'bk',   who: 'מנהל ברקן',   roles: ['barkan', 'driver'],              t: 1, done: 'הועמס על המשאית לאשדוד' },
