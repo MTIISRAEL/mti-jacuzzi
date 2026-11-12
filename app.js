@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-071732';
+  var APP_VERSION = '20261112-072019';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -634,10 +634,17 @@
       '<div class="p-facts">' + facts.map(function (f) { return '<div><span>' + esc(f[0]) + '</span><b>' + esc(f[1]) + '</b></div>'; }).join('') + '</div>' +
       '<div class="p-sketch">' + svg + '</div>' +
       '<table class="p-kit"><thead><tr><th>פריט</th><th class="c">כמות</th></tr></thead><tbody>' + parts.map(function (x) { return '<tr><td>' + esc(x.n) + '</td><td class="c q">' + esc(x.q) + '</td></tr>'; }).join('') + '</tbody></table>' +
-      (sk.notes ? '<p class="p-notes"><b>הערות למאבזר:</b> ' + esc(sk.notes) + '</p>' : '');
+      (sk.notes ? '<p class="p-notes"><b>הערות למאבזר:</b> ' + esc(sk.notes) + '</p>' : '') + tagPage(o);
     var t = document.title, img = $('printArea').querySelector('image'), go = function () { document.title = 'סקיצה ' + (o.tubNum || ''); window.print(); document.title = t; };
     // wait for the tub picture so it is on the paper
     if (img) { var pre = new Image(), fired = false, once = function () { if (!fired) { fired = true; go(); } }; pre.onload = pre.onerror = once; pre.src = img.getAttribute('href'); setTimeout(once, 2500); } else go();
+  }
+  // second page of the fitter's sheet: A4 cut into 4 tags with the serial and the model, to stick on the tub
+  function tagPage(o) {
+    var sm = SPA_MODEL[o.model], code = sm ? ((sm.name.match(/MTI-\d+/) || [''])[0]) : (o.model || '');
+    code = code.replace(/^MTI-?\s*/, 'MTI - ');
+    var one = '<div class="p-tag"><div class="p-tag-n"><small>#</small>' + esc(o.tubNum || '') + '</div><div class="p-tag-m">' + esc(code) + '</div></div>';
+    return '<div class="p-tags">' + one + one + one + one + '</div>';
   }
   // A4 sheet of one order's kit, sent to the browser's print dialog (where it can also be saved as PDF)
   function printKit(o) {
