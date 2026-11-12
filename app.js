@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-085929';
+  var APP_VERSION = '20261112-093245';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -236,6 +236,7 @@
     }
   });
   function logout() { unsub.forEach(function (u) { u(); }); unsub = []; me = null; auth.signOut(); }
+  $('scanBtn').addEventListener('click', function () { openScanner(); });
   $('logoutBtn').addEventListener('click', logout); $('logoutBtn2').addEventListener('click', logout);
 
   auth.onAuthStateChanged(async function (u) {
@@ -262,6 +263,7 @@
     var q = me.role === 'agent' ? col.where('agentEmail', '==', me.email) : col;
     unsub.push(q.onSnapshot(function (snap) {
       st.loaded = true; st.all = snap.docs.map(function (d) { var o = Object.assign({}, d.data()); o.id = d.id; return o; }); pickOrders(); render();
+      if (SCAN_ARG && !st.scanDone) { st.scanDone = true; try { history.replaceState(null, '', location.pathname); } catch (e) {} handleScan(SCAN_ARG); }
     }, function () { st.err = 'לא הצלחנו לטעון את ההזמנות. בדקו את החיבור ופתחו שוב.'; render(); }));
     if (me.role !== 'agent') unsub.push(apCol.where('status', 'in', ['approved', 'changes']).onSnapshot(function (snap) {
       st.appr = {}; snap.docs.forEach(function (d) { var a = d.data(); a.token = d.id; if (a.orderId) st.appr[a.orderId] = a; });
@@ -371,6 +373,7 @@
     if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר סידורי</label><input id="tn-' + id + '" inputmode="numeric" maxlength="' + (kindOf(o) === 'spa' ? 8 : 4) + '" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
     if (drawModel(o)) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
     if (drawModel(o) && o.sketch && me.role !== 'agent') h += '<button class="btn" type="button" data-skprint="' + id + '">הדפסת סקיצה למאבזר</button>';
+    if (kindOf(o) === 'jacuzzi' && canWrite() && me.role !== 'driver' && !del) h += '<div class="row stkrow"><span>מדבקות QR:</span><button class="btn small" type="button" data-stk="' + id + '" data-parts="tub,kit">אמבטיה + קיט</button><button class="btn small" type="button" data-stk="' + id + '" data-parts="tub">רק אמבטיה</button><button class="btn small" type="button" data-stk="' + id + '" data-parts="kit">רק קיט</button></div>';
     h += sendBox(o, '');
     if (f.unknown) return h + '<div class="issue warn">המסך הזה פועל בגרסה ישנה ולא מכיר את השלב של ההזמנה. <button class="btn small" type="button" data-reload="1">רענון</button></div></div>';
     if (!del) h += kitHtml(o, f);
@@ -521,7 +524,7 @@
     if (a && ($('list').contains(a) || $('side').contains(a) || $('usersPanel').contains(a) || ($('sketchView').querySelector('#skExtra') || $('list')).contains(a)) && (a.tagName === 'INPUT')) { pending = true; return; }
     pending = false;
     var now = new Date();
-    $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); applyKind();
+    $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); $('scanBtn').hidden = me.role === 'agent'; $('scanBtn').className = 'btn ' + (me.role === 'driver' || me.role === 'barkan' ? 'primary' : 'small'); applyKind();
     $('banner').hidden = me.role !== 'agent'; if (me.role === 'agent') $('banner').textContent = 'תצוגה בלבד: כאן רואים איפה כל ' + TR.word + ' של הלקוחות שלך ומתי הוא צפוי לרדת.';
     renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderAlerts(); renderList(now); renderSide(now); refreshSketchSend();
     $('foot').textContent = st.loaded ? 'ימי עבודה: א\'–ה\'. חריגה מסומנת כשהזמנה נשארת בשלב יותר מהזמן שהוקצב לו.' : '';
@@ -559,13 +562,13 @@
     var head = m.at ? '⚠ ברקן סימנו שהאמבטיה לא התקבלה · ' + fmt(m.at) + (m.byName ? ' · ' + esc(m.byName) : '') : '⚠ הקיט כבר בברקן והאמבטיה עוד לא התקבלה' + (o.rcvKit && o.rcvKit.at ? ' · הקיט התקבל ' + fmt(o.rcvKit.at) : '');
     return head + (m.sentAt ? '<br>נשלחה מאשדוד · ' + fmt(m.sentAt) + (m.sentName ? ' · ' + esc(m.sentName) : '') + ' · מחכים לאישור קבלה בברקן' : ''); }
   function renderAlerts() {
-    var box = $('alerts'), list = canSend() && st.kind === 'jacuzzi' ? st.orders.filter(missOpen) : [];
-    box.hidden = !list.length; if (!list.length) { box.innerHTML = ''; return; }
+    var box = $('alerts'), list = canSend() && st.kind === 'jacuzzi' ? st.orders.filter(missOpen) : [], tr = truckHtml();
+    box.hidden = !list.length && !tr; if (!list.length) { box.innerHTML = tr; return; }
     var todo = list.filter(function (o) { return !tubSent(o); }), sent = list.filter(tubSent);
     function line(o) { return '<li><button type="button" class="alink" data-open="' + esc(o.id) + '">' + esc(titleOf(o)) + (o.tubNum ? ' · סידורי ' + esc(o.tubNum) : '') + ' · ' + esc(mname(o.model)) + '</button> <span class="who">' + (tubSent(o) ? 'נשלחה ' + fmt(o.tubMissing.sentAt) : 'מ-' + fmt((o.tubMissing && o.tubMissing.at) || (o.rcvKit && o.rcvKit.at) || o.stageAt)) + '</span>' +
       (tubSent(o) ? '' : ' <button class="btn small" type="button" data-tubsent="' + esc(o.id) + '"' + (st.busy[o.id] ? ' disabled' : '') + '>נשלחה</button>') + '</li>'; }
     box.innerHTML = (todo.length ? '<div class="alert bad"><strong>צריך לשלוח אמבטיה לברקן (' + todo.length + ')</strong><ul>' + todo.map(line).join('') + '</ul></div>' : '') +
-      (sent.length ? '<div class="alert"><strong>אמבטיות שנשלחו ועוד לא אושרה קבלתן בברקן (' + sent.length + ')</strong><ul>' + sent.map(line).join('') + '</ul></div>' : '');
+      (sent.length ? '<div class="alert"><strong>אמבטיות שנשלחו ועוד לא אושרה קבלתן בברקן (' + sent.length + ')</strong><ul>' + sent.map(line).join('') + '</ul></div>' : '') + tr;
   }
   function rcvHtml(o) {
     if (!rcvOn(o)) return '';
@@ -578,6 +581,8 @@
         (key === 'rcvTub' ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '" data-stock="1"' + busy + '>יש במלאי בברקן</button>' +
           (missOpen(o) ? '' : '<button class="btn danger" type="button" data-tubmiss="' + id + '"' + busy + '>האמבטיה לא התקבלה</button>') : '') : '<span class="who">עוד לא התקבל</span>';
       if (key === 'rcvTub' && !r && missOpen(o)) v += '<div class="tubmiss">' + missLine(o) + (canSend() && !tubSent(o) ? ' <button class="btn small" type="button" data-tubsent="' + id + '"' + busy + '>האמבטיה נשלחה לברקן</button>' : '') + '</div>';
+      var lc = o[(key === 'rcvTub' ? 'tub' : 'kit') + 'Loc'];
+      if (!r && lc && lc.at === 'truckB') v = '<span class="rcv-truck">🚚 על המשאית לברקן · ' + fmt(lc.t) + (lc.byName ? ' · ' + esc(lc.byName) : '') + '</span>' + v;
       return '<div class="rcv-row"><strong>' + label + '</strong>' + v + '</div>';
     }
     return '<div class="rcvbox"><h2>קבלה בברקן</h2>' +
@@ -642,6 +647,159 @@
     var t = document.title, img = $('printArea').querySelector('image'), go = function () { document.title = 'סקיצה ' + (o.tubNum || ''); window.print(); document.title = t; };
     // wait for the tub picture so it is on the paper
     if (img) { var pre = new Image(), fired = false, once = function () { if (!fired) { fired = true; go(); } }; pre.onload = pre.onerror = once; pre.src = img.getAttribute('href'); setTimeout(once, 2500); } else go();
+  }
+  // ---------- QR stickers and scanning ----------
+  // Every jacuzzi gets two stickers: the tub and the kit. A scan says where that piece is now, by who scans it:
+  // the driver = loaded on the truck, Barkan = arrived in Barkan, the Ashdod warehouse = arrived in Ashdod.
+  // Admins and the office get a choice instead, since they may be standing anywhere.
+  var SCAN_BASE = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
+  var SCAN_ARG = new URLSearchParams(location.search).get('scan');
+  var PART = { t: 'tub', k: 'kit' }, PART_N = { tub: 'אמבטיה', kit: 'קיט' };
+  function scanUrl(o, p) { return SCAN_BASE + '?scan=' + encodeURIComponent(o.id) + '.' + (p === 'kit' ? 'k' : 't'); }
+  function parseScan(text) {
+    var m = /[?&]scan=([^&#]+)/.exec(String(text || '')) || /^([A-Za-z0-9_-]+)\.([tk])$/.exec(String(text || '').trim());
+    if (!m) return null; var v = decodeURIComponent(m[2] ? m[1] + '.' + m[2] : m[1]), i = v.lastIndexOf('.');
+    return i > 0 && PART[v.slice(i + 1)] ? { id: v.slice(0, i), p: PART[v.slice(i + 1)] } : null;
+  }
+  function locMark(at) { return { at: at, t: new Date().toISOString(), by: me.email, byName: me.name || me.email }; }
+  var LOC_N = { truckB: 'על המשאית לברקן', barkan: 'בברקן', truckA: 'על המשאית לאשדוד', ashdod: 'באשדוד' };
+  // what a scan of this piece can mean right now
+  function scanActs(o, p) {
+    if (kindOf(o) !== 'jacuzzi' || o.stage === 'delivered' || IDX[o.stage] == null) return [];
+    var i = IDX[o.stage], loc = o[p + 'Loc'], a = [];
+    if (p === 'tub') {
+      if (!o.rcvTub && i <= IDX.toBarkan) {
+        if (!loc || loc.at !== 'truckB') a.push({ k: 'loadB', who: ['driver'], n: 'עלתה על המשאית לברקן' });
+        a.push({ k: 'atB', who: ['barkan'], n: 'הגיעה לברקן' });
+      }
+      if (o.stage === 'fitting' || o.stage === 'loadBk') a.push({ k: 'loadA', who: ['driver'], n: "הג'קוזי עלה על המשאית לאשדוד" });
+      if (o.stage === 'toAshdod') a.push({ k: 'atA', who: ['warehouse'], n: "הג'קוזי הגיע לאשדוד" });
+    } else if (!o.rcvKit && (o.stage === 'kit' || o.stage === 'toBarkan')) {
+      if (!loc || loc.at !== 'truckB') a.push({ k: 'loadB', who: ['driver'], n: 'הקיט עלה על המשאית לברקן' });
+      a.push({ k: 'atB', who: ['barkan'], n: 'הקיט הגיע לברקן' });
+    }
+    return a;
+  }
+  function scanState(o, p) { // a plain sentence for "nothing to do with this scan"
+    if (kindOf(o) !== 'jacuzzi') return 'המדבקה שייכת להזמנת ספא. סריקה עובדת כרגע רק בג\'קוזי.';
+    var loc = o[p + 'Loc'];
+    if (p === 'kit' && IDX[o.stage] < IDX.kit) return 'הקיט עוד לא בהכנה במחסן (ההזמנה בשלב "' + STAGES[IDX[o.stage]].n + '").';
+    return 'אין מה לעדכן. ההזמנה בשלב "' + (STAGES[IDX[o.stage]] || { n: o.stage }).n + '"' + (loc ? ', ה' + PART_N[p] + ' ' + LOC_N[loc.at] : '') + '.';
+  }
+  // apply one action; returns a promise of the previous values, for undo
+  function scanApply(o, p, k) {
+    var L = { loadB: 'truckB', atB: 'barkan', loadA: 'truckA', atA: 'ashdod' }[k], u = {}, to = null, note = '';
+    u[p + 'Loc'] = locMark(L);
+    if (k === 'loadB' && p === 'tub' && o.tubMissing && !o.tubMissing.sentAt) u.tubMissing = Object.assign({}, o.tubMissing, { sentAt: u.tubLoc.t, sentBy: me.email, sentName: me.name || me.email });
+    if (k === 'loadB' && p === 'kit' && o.stage === 'kit') { to = 'toBarkan'; note = 'הקיט נסרק בעלייה למשאית'; }
+    if (k === 'atB') {
+      u[p === 'tub' ? 'rcvTub' : 'rcvKit'] = rcvMark(); if (p === 'tub') u.tubMissing = null;
+      var other = p === 'tub' ? o.rcvKit : o.rcvTub;
+      if (other) { to = 'waitBarkan'; note = (p === 'tub' ? 'האמבטיה' : 'הקיט') + ' נסרק בברקן, ' + (p === 'tub' ? 'הקיט' : 'האמבטיה') + ' כבר שם'; }
+      else if (p === 'kit' && o.stage === 'kit') { to = 'toBarkan'; note = 'הקיט נסרק בברקן'; }
+    }
+    if (k === 'loadA') { to = 'toAshdod'; note = 'נסרק בעלייה למשאית' + (o.stage === 'fitting' ? ' (האיבזור הסתיים)' : ''); }
+    if (k === 'atA') { to = 'inspect'; note = 'נסרק בהגעה לאשדוד'; }
+    var ev = { p: p, k: k, at: u[p + 'Loc'].t, by: me.email, byName: me.name || me.email };
+    u.scans = (o.scans || []).concat([ev]).slice(-40);
+    if (to) { var e2 = event(to, note); u.stage = to; u.stageAt = e2.at; u.hold = null; u.history = (o.history || []).concat([e2]); }
+    var prev = {}; Object.keys(u).forEach(function (key) { prev[key] = o[key] === undefined ? null : o[key]; });
+    return col.doc(o.id).update(u).then(function () { return prev; });
+  }
+  // the scan screen: what happened, with undo; on a phone with a camera it keeps scanning
+  var scanUi = { open: false, rows: [], cam: null, last: {} };
+  function scanBox() {
+    var b = $('scanBox'); if (!b) { b = document.createElement('div'); b.id = 'scanBox'; b.className = 'modal scanbox'; document.body.appendChild(b); b.addEventListener('click', onScanClick); }
+    return b;
+  }
+  function renderScan() {
+    var b = scanBox(); b.hidden = !scanUi.open; if (!scanUi.open) { b.innerHTML = ''; return; }
+    var cam = !!scanUi.cam;
+    if (!b.querySelector('.scan-card')) b.innerHTML = '<div class="modal-card scan-card" role="dialog" aria-modal="true" aria-labelledby="scTitle"><h2 id="scTitle">סריקת מדבקות</h2><div class="scan-cam"></div><div class="scan-msg" role="status"></div><ul class="scan-rows"></ul><div class="row"><button class="btn big" type="button" data-scan="close">סגירה</button></div></div>';
+    var camBox = b.querySelector('.scan-cam');
+    if (cam && !camBox.querySelector('video')) camBox.appendChild(scanUi.cam.video);
+    camBox.hidden = !cam;
+    b.querySelector('.scan-msg').innerHTML = scanUi.msg || (cam ? 'מכוונים את המצלמה אל המדבקה.' : '');
+    b.querySelector('.scan-rows').innerHTML = scanUi.rows.map(function (r, i) {
+      return '<li class="' + r.cls + '"><div><b>' + esc(r.head) + '</b><div>' + r.text + '</div></div>' +
+        (r.prev && !r.undone ? '<button class="btn small" type="button" data-scan="undo" data-i="' + i + '">ביטול</button>' : '') +
+        (r.choices ? r.choices.map(function (c) { return '<button class="btn small primary" type="button" data-scan="do" data-i="' + i + '" data-k="' + c.k + '">' + esc(c.n) + '</button>'; }).join('') : '') + '</li>';
+    }).join('');
+  }
+  function beep(ok) { try { var C = window.AudioContext || window.webkitAudioContext; scanUi.ac = scanUi.ac || new C(); var ac = scanUi.ac, os = ac.createOscillator(), g = ac.createGain(); os.frequency.value = ok ? 1200 : 300; g.gain.value = 0.15; os.connect(g); g.connect(ac.destination); os.start(); os.stop(ac.currentTime + (ok ? 0.12 : 0.35)); } catch (e) {} }
+  function handleScan(text) {
+    var s = parseScan(text); scanUi.open = true;
+    if (!s) { scanUi.rows.unshift({ cls: 'bad', head: 'קוד לא מוכר', text: 'זו לא מדבקה של המערכת.' }); beep(false); renderScan(); return; }
+    var o = st.all.find(function (x) { return x.id === s.id; });
+    var head = PART_N[s.p] + (o && o.tubNum ? ' · ' + o.tubNum : '');
+    if (!o) { scanUi.rows.unshift({ cls: 'bad', head: head, text: 'ההזמנה לא נמצאה (אולי נמחקה).' }); beep(false); renderScan(); return; }
+    var who = esc(titleOf(o)) + ' · ' + esc(mname(o.model));
+    if (me.role === 'agent') { scanUi.rows.unshift({ cls: '', head: head, text: who + '<br>' + esc(scanState(o, s.p)) }); renderScan(); return; }
+    var acts = scanActs(o, s.p), mine = acts.filter(function (a) { return a.who.indexOf(me.role) > -1; });
+    if (!acts.length) { scanUi.rows.unshift({ cls: 'warn', head: head, text: who + '<br>' + esc(scanState(o, s.p)) }); beep(false); renderScan(); return; }
+    if (!mine.length && (isAdmin() || me.role === 'office')) { // choose what happened
+      scanUi.rows.unshift({ cls: 'ask', head: head, text: who + '<br>מה קרה עם ה' + PART_N[s.p] + '?', choices: acts, o: o, p: s.p }); beep(true); renderScan(); return; }
+    if (!mine.length) { scanUi.rows.unshift({ cls: 'warn', head: head, text: who + '<br>' + esc(scanState(o, s.p)) + '<br>הסריקה הבאה צפויה אצל: ' + acts.map(function (a) { return a.who.map(function (w) { return ROLES[w]; }).join(' / '); }).join(' או ') }); beep(false); renderScan(); return; }
+    runAct({ cls: 'ok', head: head, who: who, o: o, p: s.p }, mine[0]);
+  }
+  function runAct(row, act) {
+    row.text = row.who + '<br>' + esc(act.n) + '…'; row.cls = 'ok'; row.choices = null;
+    if (scanUi.rows.indexOf(row) < 0) scanUi.rows.unshift(row); renderScan();
+    scanApply(row.o, row.p, act.k).then(function (prev) { row.prev = prev; row.text = row.who + '<br>✓ ' + esc(act.n); beep(true); renderScan(); },
+      function () { row.cls = 'bad'; row.text = row.who + '<br>הסריקה לא נשמרה. בדקו את החיבור ונסו שוב.'; beep(false); renderScan(); });
+  }
+  function onScanClick(ev) {
+    var b = ev.target.closest('button[data-scan]'); if (!b) return; var r = scanUi.rows[+b.dataset.i];
+    if (b.dataset.scan === 'close') { stopCam(); scanUi.open = false; scanUi.rows = []; scanUi.msg = ''; renderScan(); return; }
+    if (b.dataset.scan === 'undo' && r && r.prev) { b.disabled = true; col.doc(r.o.id).update(r.prev).then(function () { r.undone = true; r.cls = ''; r.text += ' · <b>בוטל</b>'; renderScan(); }, function () { r.text += ' · הביטול לא נשמר'; renderScan(); }); return; }
+    if (b.dataset.scan === 'do' && r) { var o = st.all.find(function (x) { return x.id === r.o.id; }) || r.o, act = (scanActs(o, r.p).filter(function (a) { return a.k === b.dataset.k; }))[0]; if (!act) return; r.o = o; r.who = esc(titleOf(o)) + ' · ' + esc(mname(o.model)); runAct(r, act); }
+  }
+  // camera scanning, where the browser can read QR codes itself (Chrome on Android)
+  function canCam() { return 'BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia; }
+  async function openScanner() {
+    scanUi.open = true; scanUi.msg = ''; renderScan();
+    if (!canCam()) { scanUi.msg = 'בטלפון הזה סורקים עם אפליקציית המצלמה הרגילה: מכוונים אל המדבקה ולוחצים על הקישור שמופיע. המערכת תיפתח ותרשום את הסריקה.'; renderScan(); return; }
+    try {
+      var stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      var video = document.createElement('video'); video.setAttribute('playsinline', ''); video.muted = true; video.srcObject = stream; await video.play();
+      var det = new window.BarcodeDetector({ formats: ['qr_code'] });
+      scanUi.cam = { video: video, stream: stream, timer: null }; renderScan();
+      var tick = async function () {
+        if (!scanUi.cam) return;
+        try { var codes = await det.detect(video); codes.forEach(function (c) { var t = c.rawValue, now = Date.now(); if (scanUi.last[t] && now - scanUi.last[t] < 5000) return; scanUi.last[t] = now; handleScan(t); }); } catch (e) {}
+        if (scanUi.cam) scanUi.cam.timer = setTimeout(tick, 250);
+      };
+      tick();
+    } catch (e) { scanUi.msg = 'אין גישה למצלמה. צריך לאשר לדפדפן להשתמש במצלמה, או לסרוק עם אפליקציית המצלמה הרגילה.'; renderScan(); }
+  }
+  function stopCam() { var c = scanUi.cam; scanUi.cam = null; if (!c) return; clearTimeout(c.timer); try { c.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} }
+  // what is on the truck right now (scanned on, not yet scanned off)
+  function truckList() {
+    var out = []; st.all.forEach(function (o) { if (kindOf(o) !== 'jacuzzi' || o.stage === 'delivered') return;
+      ['tub', 'kit'].forEach(function (p) { var l = o[p + 'Loc']; if (!l || (l.at !== 'truckB' && l.at !== 'truckA')) return;
+        if (p === 'kit' && o.rcvKit) return; if (p === 'tub' && l.at === 'truckB' && o.rcvTub) return; if (l.at === 'truckA' && o.stage !== 'toAshdod') return;
+        out.push({ o: o, p: p, l: l }); }); });
+    return out;
+  }
+  function truckHtml() {
+    if (!me || me.role === 'agent' || st.kind !== 'jacuzzi') return '';
+    var t = truckList(); if (!t.length) return '';
+    return '<div class="alert truck"><strong>על המשאית עכשיו (' + t.length + ')</strong><ul>' + t.map(function (x) {
+      var late = (Date.now() - new Date(x.l.t)) > 20 * 3600 * 1000;
+      return '<li><button type="button" class="alink" data-open="' + esc(x.o.id) + '">' + PART_N[x.p] + (x.o.tubNum ? ' ' + esc(x.o.tubNum) : '') + ' · ' + esc(titleOf(x.o)) + '</button> <span class="who">' + (x.l.at === 'truckB' ? 'לברקן' : 'לאשדוד') + ' · עלה ' + fmt(x.l.t) + (x.l.byName ? ' · ' + esc(x.l.byName) : '') + '</span>' + (late ? ' <span class="chip hold">עלה ולא נסרק בירידה</span>' : '') + '</li>'; }).join('') + '</ul></div>';
+  }
+  // stickers: 100 x 150 mm, portrait, one per page
+  function stickerHtml(o, p) {
+    return '<div class="stk"><div class="stk-top"><span class="stk-brand">MTI</span><span class="stk-part">' + PART_N[p] + '</span></div>' +
+      '<div class="stk-num">' + esc(o.tubNum || '----') + '</div><div class="stk-model">' + esc(mname(o.model)) + (o.system ? ' · ' + esc(o.system) : '') + '</div>' +
+      '<div class="stk-cust">' + esc(titleOf(o)) + '</div><div class="stk-qr">' + MTIQR.svg(scanUrl(o, p)) + '</div>' +
+      '<div class="stk-foot">' + (o.num ? 'הזמנה ' + esc(o.num) + ' · ' : '') + 'לסרוק בכל העמסה ופריקה</div></div>';
+  }
+  function printStickers(o, parts) {
+    $('printArea').innerHTML = '<div class="stks">' + parts.map(function (p) { return stickerHtml(o, p); }).join('') + '</div>';
+    var ps = document.createElement('style'); ps.id = 'pageSize'; ps.textContent = '@page { size: 100mm 150mm; margin: 0; }'; document.head.appendChild(ps);
+    var t = document.title; document.title = 'מדבקות ' + (o.tubNum || ''); window.print(); document.title = t;
+    setTimeout(function () { ps.remove(); }, 1500);
   }
   // second page of the fitter's sheet: A4 cut into 4 tags with the serial and the model, to stick on the tub
   function tagPage(o) {
@@ -765,6 +923,7 @@
       ask('ביטול הקבלה', orderLine(o) + '<p>' + (part === 'rcvTub' ? 'האמבטיה' : 'הקיט') + ' יסומן שוב כ"עוד לא התקבל".</p>', 'כן, לבטל').then(function (ok) { if (!ok) return; var x = {}; x[part] = null; write(o.id, function () { return col.doc(o.id).update(x); }); });
     })(o, d.part);
     else if (d.kitprint && (o = find(d.kitprint))) printKit(o);
+    else if (d.stk && (o = find(d.stk))) printStickers(o, d.parts.split(','));
     else if (d.skprint && (o = find(d.skprint))) printSketch(o);
     else if (d.skipappr && (o = find(d.skipappr))) (function (o) { ask('דילוג על אישור הלקוח', orderLine(o) + stepLine(STAGES[IDX[o.stage]].n, STAGES[IDX.kitOrder].n) +
       '<p>משתמשים בזה רק כשהלקוח כבר אישר סקיצה עם ההזמנה. לא יישלח קישור לאישור, ובהיסטוריה יירשם שהאישור דולג.</p>' + (o.sketch ? '' : '<p class="who">אין שרטוט במערכת: את רשימת הקיט ממלאים ידנית.</p>'), 'כן, לדלג ולעבור להזמנת קיט').then(function (ok) {
