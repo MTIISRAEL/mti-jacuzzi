@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-094915';
+  var APP_VERSION = '20261112-095120';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -548,7 +548,7 @@
   function rcvOn(o) { return kindOf(o) === 'jacuzzi' && o.stage !== 'delivered' && IDX[o.stage] <= IDX.toBarkan; }
   function rcvMark() { return { at: new Date().toISOString(), by: me.email, byName: me.name || me.email }; }
   function rcvChip(o) {
-    var mc = missOpen(o) ? '<span class="chip hold">' + (tubSent(o) ? 'אמבטיה נשלחה, לא אושרה בברקן' : 'אשדוד: לשלוח אמבטיה לברקן') + '</span>' : '';
+    var mc = missOpen(o) ? '<span class="chip hold">' + (tubSent(o) ? 'אמבטיה על המשאית, לא נסרקה בברקן' : 'אשדוד: לשלוח אמבטיה לברקן') + '</span>' : '';
     return mc ? mc + (o.rcvKit && !o.rcvKit.fix ? '<span class="chip ok">בברקן: קיט</span>' : '') : rcvChip2(o);
   }
   function rcvChip2(o) {
@@ -563,15 +563,14 @@
   function tubSent(o) { return !!(o.tubMissing && o.tubMissing.sentAt); }
   function missLine(o) { var m = o.tubMissing || {};
     var head = m.at ? '⚠ ברקן סימנו שהאמבטיה לא התקבלה · ' + fmt(m.at) + (m.byName ? ' · ' + esc(m.byName) : '') : '⚠ הקיט כבר בברקן והאמבטיה עוד לא התקבלה' + (o.rcvKit && o.rcvKit.at ? ' · הקיט התקבל ' + fmt(o.rcvKit.at) : '');
-    return head + (m.sentAt ? '<br>נשלחה מאשדוד · ' + fmt(m.sentAt) + (m.sentName ? ' · ' + esc(m.sentName) : '') + ' · מחכים לאישור קבלה בברקן' : ''); }
+    return head + (m.sentAt ? '<br>נסרקה בעלייה למשאית · ' + fmt(m.sentAt) + (m.sentName ? ' · ' + esc(m.sentName) : '') + ' · מחכים לאישור קבלה בברקן' : ''); }
   function renderAlerts() {
     var box = $('alerts'), list = canSend() && st.kind === 'jacuzzi' ? st.orders.filter(missOpen) : [], tr = truckHtml();
     box.hidden = !list.length && !tr; if (!list.length) { box.innerHTML = tr; return; }
     var todo = list.filter(function (o) { return !tubSent(o); }), sent = list.filter(tubSent);
-    function line(o) { return '<li><button type="button" class="alink" data-open="' + esc(o.id) + '">' + esc(titleOf(o)) + (o.tubNum ? ' · סידורי ' + esc(o.tubNum) : '') + ' · ' + esc(omodel(o)) + '</button> <span class="who">' + (tubSent(o) ? 'נשלחה ' + fmt(o.tubMissing.sentAt) : 'מ-' + fmt((o.tubMissing && o.tubMissing.at) || (o.rcvKit && o.rcvKit.at) || o.stageAt)) + '</span>' +
-      (tubSent(o) ? '' : ' <button class="btn small" type="button" data-tubsent="' + esc(o.id) + '"' + (st.busy[o.id] ? ' disabled' : '') + '>נשלחה</button>') + '</li>'; }
+    function line(o) { return '<li><button type="button" class="alink" data-open="' + esc(o.id) + '">' + esc(titleOf(o)) + (o.tubNum ? ' · סידורי ' + esc(o.tubNum) : '') + ' · ' + esc(omodel(o)) + '</button> <span class="who">' + (tubSent(o) ? 'עלתה למשאית ' + fmt(o.tubMissing.sentAt) : 'מ-' + fmt((o.tubMissing && o.tubMissing.at) || (o.rcvKit && o.rcvKit.at) || o.stageAt)) + '</span>' + (tubSent(o) ? '' : ' <span class="who">· תעבור כשהנהג יסרוק את המדבקה</span>') + '</li>'; }
     box.innerHTML = (todo.length ? '<div class="alert bad"><strong>צריך לשלוח אמבטיה לברקן (' + todo.length + ')</strong><ul>' + todo.map(line).join('') + '</ul></div>' : '') +
-      (sent.length ? '<div class="alert"><strong>אמבטיות שנשלחו ועוד לא אושרה קבלתן בברקן (' + sent.length + ')</strong><ul>' + sent.map(line).join('') + '</ul></div>' : '') + tr;
+      (sent.length ? '<div class="alert"><strong>אמבטיות שעלו למשאית ועוד לא נסרקו בברקן (' + sent.length + ')</strong><ul>' + sent.map(line).join('') + '</ul></div>' : '') + tr;
   }
   function rcvHtml(o) {
     if (!rcvOn(o)) return '';
@@ -583,7 +582,7 @@
       else v = can ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '"' + busy + '>' + btn + '</button>' +
         (key === 'rcvTub' ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '" data-stock="1"' + busy + '>יש במלאי בברקן</button>' +
           (missOpen(o) ? '' : '<button class="btn danger" type="button" data-tubmiss="' + id + '"' + busy + '>האמבטיה לא התקבלה</button>') : '') : '<span class="who">עוד לא התקבל</span>';
-      if (key === 'rcvTub' && !r && missOpen(o)) v += '<div class="tubmiss">' + missLine(o) + (canSend() && !tubSent(o) ? ' <button class="btn small" type="button" data-tubsent="' + id + '"' + busy + '>האמבטיה נשלחה לברקן</button>' : '') + '</div>';
+      if (key === 'rcvTub' && !r && missOpen(o)) v += '<div class="tubmiss">' + missLine(o) + '</div>';
       var lc = o[(key === 'rcvTub' ? 'tub' : 'kit') + 'Loc'];
       if (!r && lc && lc.at === 'truckB') v = '<span class="rcv-truck">🚚 על המשאית לברקן · ' + fmt(lc.t) + (lc.byName ? ' · ' + esc(lc.byName) : '') + '</span>' + v;
       return '<div class="rcv-row"><strong>' + label + '</strong>' + v + '</div>';
