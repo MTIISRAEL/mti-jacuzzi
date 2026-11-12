@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-141328';
+  var APP_VERSION = '20261112-141548';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -21,9 +21,7 @@
   // stages that were merged on 12 Nov 2026: an order still standing on one is read as standing on the merged stage
   var SCAN_HINT = {
     kit: 'עובר לבד כשהנהג סורק את מדבקת הקיט בעלייה למשאית.',
-    toBarkan: 'עובר לאיבזור כשבברקן סורקים את מדבקת האמבטיה ואת מדבקת הקיט.',
-    loadBk: 'עובר לבד כשהנהג סורק את מדבקת האמבטיה בעלייה למשאית.',
-    toAshdod: 'עובר לבדיקה כשבאשדוד סורקים את מדבקת האמבטיה בירידה מהמשאית.'
+    toBarkan: 'עובר לאיבזור כשבברקן סורקים את מדבקת האמבטיה ואת מדבקת הקיט.'
   };
   var J_OLD = { request: 'drawing', kitOrder: 'kit', waitBarkan: 'fitting', pack: 'inspect' };
   var J_OLD_N = { request: 'בקשת אספקה', kitOrder: 'הזמנת קיט למחסן', waitBarkan: 'ממתין לאיבזור בברקן', pack: 'אריזה מחדש' };
@@ -986,7 +984,11 @@
     else if (d.next && (o = find(d.next))) { var nx = nextStage(o), cur = STAGES[IDX[o.stage]]; if (nx && canAct(cur)) (function (o, nx, cur) {
       var extra = o.stage === TR.kitStage ? '<div class="who">' + (kindOf(o) === 'spa' ? 'רשימת הקיט תינעל ותעבור למחסן כמו שהיא עכשיו.' : 'רשימת הקיט תינעל כמו שהיא עכשיו.') + '</div>' : nx.k === 'delivered' ? '<div class="who">ההזמנה תעבור לרשימת "סופקו".</div>' : '';
       ask(cur.done + '?', orderLine(o) + stepLine(cur.n, nx.n) + '<div class="who">מי ממשיך: ' + esc(nx.who || '—') + '</div>' + extra, 'כן, ' + cur.done).then(function (ok) { if (!ok) return;
-        write(o.id, function () { return move(o, nx.k, null, o.stage === TR.kitStage ? { kitList: kitNow(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; }) } : null); }); });
+        // the return trip is marked by button for now (no sticker printer in Barkan): keep the "on the truck" list right too
+        var ex = o.stage === TR.kitStage ? { kitList: kitNow(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; }) } : null;
+        if (kindOf(o) === 'jacuzzi' && nx.k === 'toAshdod') ex = { tubLoc: locMark('truckA') };
+        if (kindOf(o) === 'jacuzzi' && o.stage === 'toAshdod') ex = { tubLoc: locMark('ashdod') };
+        write(o.id, function () { return move(o, nx.k, null, ex); }); });
     })(o, nx, cur); }
     else if (d.kitadd && (o = find(d.kitadd))) { var kn = $('kn-' + o.id).value.trim().slice(0, 80), kq = parseInt($('kq-' + o.id).value, 10) || 1, ks = $('ks-' + o.id).value.trim().slice(0, 20); if (!kn) return; document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ kitExtra: (o.kitExtra || []).concat([{ n: kn, q: kq, sku: ks }]) }); }); }
     else if (d.kitdel && (o = find(d.kitdel))) { var ke = (o.kitExtra || []).slice(); ke.splice(+d.i, 1); write(o.id, function () { return col.doc(o.id).update({ kitExtra: ke }); }); }
