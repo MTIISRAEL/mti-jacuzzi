@@ -323,3 +323,10 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 .alert li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .alink { font: inherit; font-weight: 600; color: var(--ink); background: none; border: 0; padding: 4px 0; text-decoration: underline; cursor: pointer; text-align: start; min-height: 36px; }
 .tubmiss { flex-basis: 100%; color: var(--bad); font-weight: 600; }
+@media print {
+  #printArea .p-legend { display: flex; gap: 14pt; justify-content: center; font-size: 11pt; margin: -4pt 0 6pt; }
+  #printArea .p-legend span { display: inline-flex; align-items: center; gap: 4pt; }
+  #printArea .lg { display: inline-block; vertical-align: middle; border-radius: 50%; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #printArea .lg.j3 { width: 11pt; height: 11pt; border: 4pt solid #000; background: #fff; }
+  #printArea .lg.j2 { width: 9pt; height: 9pt; border: 1.8pt solid #000; background: #fff; }
+}

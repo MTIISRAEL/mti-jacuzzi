@@ -69,7 +69,7 @@ window.Sketch = (function () {
 
   function open(host, opt) {
     var model = opt.model, W = model.w, H = model.h, system = opt.system || '', SPA = opt.kind === 'spa';
-    var tpl = TEMPLATES[model.code] || null, readOnly = !!opt.readOnly;
+    var tpl = TEMPLATES[model.code] || null, readOnly = !!opt.readOnly, PRINT = !!opt.print;
     // how many jets the catalog gives this model in this system (undefined when unknown, e.g. system 'other')
     var jetsStd = system === 'BASIC' ? model.jb : system === 'TITANIUM' ? model.jt : null;
     var uid = 0, selId = null, drag = null, armed = {}, dirty = false, saving = false;
@@ -102,7 +102,7 @@ window.Sketch = (function () {
       '<div class="row" id="skSide"></div>' +
       '<div class="row" id="skFinish"></div>' +
       '<div class="row" id="skMotorRow"><label for="skMotor">סוג מנוע:</label><select id="skMotor"></select><label for="skHeater">גוף חימום:</label><select id="skHeater"></select><label for="skLight">פנס תאורה:</label><select id="skLight"><option value="">לבחור</option><option value="1">עם פנס</option><option value="0">בלי פנס</option></select></div>' +
-      '<div class="board"><svg id="skSvg" viewBox="-20 -20 ' + (W + 40) + ' ' + (H + 32) + '" role="img" aria-label="מבט על של האמבטיה"></svg>' +
+      '<div class="board"><svg id="skSvg" viewBox="' + (PRINT ? '-18 -19 ' + (W + 28) + ' ' + (H + 29) : '-20 -20 ' + (W + 40) + ' ' + (H + 32)) + '" role="img" aria-label="מבט על של האמבטיה"></svg>' +
       '<div class="legend" hidden><span><i style="background:var(--warn)"></i>הוזז מהסטנדרט</span><span><i style="background:var(--ok)"></i>נוסף</span><span><i style="background:var(--bad)"></i>הוסר</span></div>' +
       '<p class="hint" id="skHint"></p></div>' +
       '<div class="sel" id="skSel" hidden></div>' +
@@ -140,6 +140,8 @@ window.Sketch = (function () {
     function symbol(it, small) {
       var t = it.type, f = S.finish === 'white';
       var body = f ? '#f6f6f3' : '#3a3d42', ring = f ? '#8d949b' : '#9a9da3', core = f ? '#c9cdd1' : '#17191c';
+      // printed for the fitter: 3" solid black, 2" hollow ring, so the two sizes differ even in black and white
+      if (t === 'jet' && PRINT) return jsize(it) === 2 ? '<circle r="2.1" fill="#fff" stroke="#000" stroke-width="1"/>' : '<circle r="3.1" fill="#000"/><circle r=".9" fill="#fff"/>';
       if (t === 'jet') { var jr = jsize(it) === 2 ? 2.0 : 3.0; return '<circle r="' + jr + '" fill="' + body + '" stroke="' + ring + '" stroke-width=".7"/><circle r="' + (jr * 0.4) + '" fill="' + core + '"/>'; }
       if (t === 'suction') return '<circle r="2.9" fill="#b9bdc2" stroke="#70767d" stroke-width=".6"/><path d="M-1.8 -1h3.6M-2.2 0h4.4M-1.8 1h3.6" stroke="#4d5359" stroke-width=".45" fill="none"/>';
       var tag = small || !TYPES[t].tag ? '' : '<text class="t-lbl" style="font-size:3.2px" text-anchor="middle" y="5.6" fill="var(--ink, #222)">' + TYPES[t].tag + '</text>';
@@ -209,7 +211,7 @@ window.Sketch = (function () {
     }
     function tubSvg() {
       if (model.src) return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><image href="' + model.src + '" x="0" y="0" width="' + W + '" height="' + H + '" preserveAspectRatio="none"/>';
-      if (model.img) return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><image href="img/' + (model.base || model.code) + (model.sides ? '-' + (S.side || 'R') : '') + '.jpg" x="0" y="0" width="' + W + '" height="' + H + '" preserveAspectRatio="none"/>';
+      if (model.img) return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><image href="img/' + (model.base || model.code) + (model.sides ? '-' + (S.side || 'R') : '') + '.jpg" x="0" y="0" width="' + W + '" height="' + H + '" preserveAspectRatio="none"' + (PRINT ? ' opacity=".45"' : '') + '/>';
       // no picture for this model yet: a plain outline at the model's size
       if (model.shape === 'corner') return '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/><path d="M0 0H' + W + 'V' + H + 'H' + (W * 0.72) + 'Q' + (W * 0.05) + ' ' + (H * 0.95) + ' 0 ' + (H * 0.28) + 'Z" fill="#f1efed" stroke="#cfcac6" stroke-width=".6"/>' +
         '<path d="M' + (W * 0.14) + ' ' + (H * 0.12) + 'H' + (W * 0.88) + 'V' + (H * 0.86) + 'H' + (W * 0.74) + 'Q' + (W * 0.16) + ' ' + (H * 0.84) + ' ' + (W * 0.14) + ' ' + (H * 0.3) + 'Z" fill="#fbfaf9" stroke="#cfcac6" stroke-width=".6"/>';
