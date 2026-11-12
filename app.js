@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-095501';
+  var APP_VERSION = '20261112-095700';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -349,7 +349,7 @@
   }
   function summaryHtml(o, f) {
     var del = o.stage === 'delivered';
-    var chips = '<span class="chip' + (del ? ' ok' : '') + '">' + f.s.n + '</span>';
+    var chips = kindOf(o) === 'jacuzzi' && o.stage === 'toBarkan' && rcvChip(o) ? '' : '<span class="chip' + (del ? ' ok' : '') + '">' + f.s.n + '</span>';
     if (f.hold) chips += '<span class="chip hold">מעוכב: ' + esc(o.hold.reason) + '</span>';
     else if (f.late) chips += '<span class="chip late">חריגה של ' + dayWord(f.over) + '</span>';
     var ca = custAnswer(o);
@@ -556,14 +556,20 @@
   // before the kit is ready. The order leaves "on the way to Barkan" only when both are there.
   function rcvOn(o) { return kindOf(o) === 'jacuzzi' && o.stage !== 'delivered' && IDX[o.stage] <= IDX.toBarkan; }
   function rcvMark() { return { at: new Date().toISOString(), by: me.email, byName: me.name || me.email }; }
-  function rcvChip(o) {
-    var mc = missOpen(o) ? '<span class="chip hold">' + (tubSent(o) ? 'אמבטיה על המשאית, לא נסרקה בברקן' : 'אשדוד: לשלוח אמבטיה לברקן') + '</span>' : '';
-    return mc ? mc + (o.rcvKit && !o.rcvKit.fix ? '<span class="chip ok">בברקן: קיט</span>' : '') : rcvChip2(o);
+  // one plain line on the card: where the tub and the kit are right now, until both are in Barkan
+  function pieceAt(o, p) {
+    var r = p === 'tub' ? o.rcvTub : o.rcvKit, l = o[p + 'Loc'];
+    if (r && r.fix) return '';
+    if (r) return p === 'tub' && r.stock ? 'מהמלאי בברקן' : 'בברקן';
+    if (l && l.at === 'truckB') return 'על המשאית';
+    if (p === 'kit' && IDX[o.stage] <= IDX.kit) return 'בהכנה';
+    return 'באשדוד';
   }
-  function rcvChip2(o) {
-    if (!rcvOn(o) || (!o.rcvTub && !o.rcvKit && o.stage !== 'toBarkan')) return '';
-    var got = [o.rcvTub ? (o.rcvTub.stock ? 'אמבטיה מהמלאי' : 'אמבטיה') : '', o.rcvKit ? 'קיט' : ''].filter(Boolean), miss = [o.rcvTub ? '' : 'אמבטיה', o.rcvKit ? '' : 'קיט'].filter(Boolean);
-    return (got.length ? '<span class="chip ok">בברקן: ' + got.join(' + ') + '</span>' : '') + (o.stage === 'toBarkan' && miss.length ? '<span class="chip">עוד לא בברקן: ' + miss.join(' + ') + '</span>' : '');
+  function rcvChip(o) {
+    if (!rcvOn(o) || (IDX[o.stage] < IDX.toBarkan && !o.rcvTub && !o.tubLoc)) return '';
+    var t = pieceAt(o, 'tub'), k = pieceAt(o, 'kit');
+    var txt = ['אמבטיה ' + t, k && o.stage !== 'kit' ? 'קיט ' + k : ''].filter(Boolean).join(' · ');
+    return '<span class="chip' + (missOpen(o) ? ' hold' : '') + '">' + txt + '</span>';
   }
   // "the tub did not arrive": flagged in Barkan, shown to the office and the Ashdod warehouse until Barkan confirms receipt
   function canSend() { return me && (isOffice() || me.role === 'warehouse'); }
