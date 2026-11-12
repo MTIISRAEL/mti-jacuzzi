@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-072659';
+  var APP_VERSION = '20261112-082938';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -633,11 +633,11 @@
     var svg = tmp.querySelector('#skSvg').outerHTML.replace('id="skSvg"', '');
     tmp.querySelector('#skClose').click(); tmp.remove();
     var parts = spa ? Sketch.spaCounts(sk) : Sketch.kitOf(sk).filter(function (x) { return /^ג'ט|^מנוע|^פנס|^יניקה|^ברז|^מזלף/.test(x.n); }).concat(addonLines(o));
-    var facts = spa ? [['דגם', mname(o.model)], ['איבזור', o.equipName], ['גוון ג\'טים', pick(SPA.jetColors, o.jetColor)], ['בקר', pick(SPA.controllers, o.controller)], ['התקנה', pick(SPA.installs, o.install)]].filter(function (f) { return f[1]; }) : [['דגם', mname(o.model) + ' · ' + model.dims], ['מערכת', o.system], ['כיוון', !model.sides ? '' : sk.side === 'R' ? 'ימין' : sk.side === 'L' ? 'שמאל' : ''], ['פנס', sk.light === true ? 'יש' : 'אין'], ['פאנל', o.panel ? 'כן' : '']].filter(function (f) { return f[1]; });
+    var facts = spa ? [['דגם', mname(o.model)], ['איבזור', o.equipName], ['גוון ג\'טים', pick(SPA.jetColors, o.jetColor)], ['בקר', pick(SPA.controllers, o.controller)], ['התקנה', pick(SPA.installs, o.install)]].filter(function (f) { return f[1]; }) : [['דגם', mname(o.model) + ' · ' + model.dims], ['מערכת', o.system], ['כיוון', !model.sides ? '' : sk.side === 'R' ? 'ימין' : sk.side === 'L' ? 'שמאל' : ''], ['פנס', sk.light === true ? 'יש' : 'אין'], ['גימור ג\'טים', sk.series === 'prime' ? 'ניקל · PRIME' : sk.finish === 'white' ? 'לבן' : 'גרפיט'], ['פאנל', o.panel ? 'כן' : '']].filter(function (f) { return f[1]; });
     $('printArea').innerHTML = '<div class="p-page"><div class="p-head"><div><div class="p-brand">MTI</div><h1>סקיצה לאיבזור</h1></div><div class="p-serial"><span>' + (spa ? 'ספא מס\'' : 'ג\'קוזי מס\'') + '</span><b>' + esc(o.tubNum || '') + '</b></div></div>' +
       '<div class="p-facts">' + facts.map(function (f) { return '<div><span>' + esc(f[0]) + '</span><b>' + esc(f[1]) + '</b></div>'; }).join('') + '</div>' +
-      '<div class="p-sketch">' + svg + '</div>' + (spa ? '' : '<div class="p-legend"><span><i class="lg j3"></i>ג\'ט 3"</span><span><i class="lg j2"></i>ג\'ט 2"</span></div>') +
-      '<table class="p-kit"><thead><tr><th>פריט</th><th class="c">כמות</th></tr></thead><tbody>' + parts.map(function (x) { var m = /^ג'ט (\d)"/.exec(x.n); return '<tr><td>' + (m && !spa ? '<i class="lg j' + m[1] + '"></i> ' : '') + esc(x.n) + '</td><td class="c q">' + esc(x.q) + '</td></tr>'; }).join('') + '</tbody></table>' +
+      '<div class="p-sketch">' + svg + '</div>' + (spa ? '' : '<div class="p-legend' + (sk.finish === 'white' ? ' wh' : '') + '"><span><i class="lg j3"></i>ג\'ט 3"</span><span><i class="lg j2"></i>ג\'ט 2"</span><span><b>' + (sk.series === 'prime' ? 'ג\'טים ניקל (PRIME)' : sk.finish === 'white' ? 'ג\'טים לבנים' : 'ג\'טים גרפיט') + '</b></span></div>') +
+      '<table class="p-kit' + (!spa && sk.finish === 'white' ? ' wh' : '') + '"><thead><tr><th>פריט</th><th class="c">כמות</th></tr></thead><tbody>' + parts.map(function (x) { var m = /^ג'ט (\d)"/.exec(x.n); return '<tr><td>' + (m && !spa ? '<i class="lg j' + m[1] + '"></i> ' : '') + esc(x.n) + '</td><td class="c q">' + esc(x.q) + '</td></tr>'; }).join('') + '</tbody></table>' +
       (sk.notes ? '<p class="p-notes"><b>הערות למאבזר:</b> ' + esc(sk.notes) + '</p>' : '') + '</div>' + tagPage(o);
     var t = document.title, img = $('printArea').querySelector('image'), go = function () { document.title = 'סקיצה ' + (o.tubNum || ''); window.print(); document.title = t; };
     // wait for the tub picture so it is on the paper

@@ -141,7 +141,9 @@ window.Sketch = (function () {
       var t = it.type, f = S.finish === 'white';
       var body = f ? '#f6f6f3' : '#3a3d42', ring = f ? '#8d949b' : '#9a9da3', core = f ? '#c9cdd1' : '#17191c';
       // printed for the fitter: 3" solid black, 2" hollow ring, so the two sizes differ even in black and white
-      if (t === 'jet' && PRINT) return jsize(it) === 2 ? '<circle r="2.1" fill="#fff" stroke="#000" stroke-width="1"/>' : '<circle r="3.1" fill="#000"/><circle r=".9" fill="#fff"/>';
+      // graphite jets print black, white jets print light grey with a black outline
+      if (t === 'jet' && PRINT) return f ? (jsize(it) === 2 ? '<circle r="2.1" fill="#fff" stroke="#000" stroke-width="1.3"/><circle r="2.1" fill="none" stroke="#b5b5b5" stroke-width=".7"/>' : '<circle r="3.1" fill="#c4c4c4" stroke="#000" stroke-width=".55"/><circle r=".9" fill="#fff" stroke="#000" stroke-width=".3"/>')
+        : (jsize(it) === 2 ? '<circle r="2.1" fill="#fff" stroke="#000" stroke-width="1"/>' : '<circle r="3.1" fill="#000"/><circle r=".9" fill="#fff"/>');
       if (t === 'jet') { var jr = jsize(it) === 2 ? 2.0 : 3.0; return '<circle r="' + jr + '" fill="' + body + '" stroke="' + ring + '" stroke-width=".7"/><circle r="' + (jr * 0.4) + '" fill="' + core + '"/>'; }
       if (t === 'suction') return '<circle r="2.9" fill="#b9bdc2" stroke="#70767d" stroke-width=".6"/><path d="M-1.8 -1h3.6M-2.2 0h4.4M-1.8 1h3.6" stroke="#4d5359" stroke-width=".45" fill="none"/>';
       var tag = small || !TYPES[t].tag ? '' : '<text class="t-lbl" style="font-size:3.2px" text-anchor="middle" y="5.6" fill="var(--ink, #222)">' + TYPES[t].tag + '</text>';

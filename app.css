@@ -330,3 +330,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
   #printArea .lg.j3 { width: 11pt; height: 11pt; border: 4pt solid #000; background: #fff; }
   #printArea .lg.j2 { width: 9pt; height: 9pt; border: 1.8pt solid #000; background: #fff; }
 }
+@media print {
+  #printArea .wh .lg.j3 { border-color: #000; border-width: 1pt; background: #c4c4c4 !important; }
+  #printArea .wh .lg.j2 { border-color: #000; }
+}
