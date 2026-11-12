@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-094549';
+  var APP_VERSION = '20261112-094915';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -376,7 +376,7 @@
     if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר סידורי</label><input id="tn-' + id + '" inputmode="numeric" maxlength="' + (kindOf(o) === 'spa' ? 8 : 4) + '" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
     if (drawModel(o)) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
     if (drawModel(o) && o.sketch && me.role !== 'agent') h += '<button class="btn" type="button" data-skprint="' + id + '">הדפסת סקיצה למאבזר</button>';
-    if (kindOf(o) === 'jacuzzi' && canWrite() && me.role !== 'driver' && !del) h += '<div class="row stkrow"><span>מדבקות QR:</span><button class="btn small" type="button" data-stk="' + id + '" data-parts="tub,kit">אמבטיה + קיט</button><button class="btn small" type="button" data-stk="' + id + '" data-parts="tub">רק אמבטיה</button><button class="btn small" type="button" data-stk="' + id + '" data-parts="kit">רק קיט</button></div>';
+    if (kindOf(o) === 'jacuzzi' && canWrite() && me.role !== 'driver' && !del) h += '<div class="row stkrow"><span>מדבקות QR:</span><button class="btn small" type="button" data-stk="' + id + '" data-parts="tub,kit">אמבטיה + קיט (4)</button><button class="btn small" type="button" data-stk="' + id + '" data-parts="tub">רק אמבטיה</button><button class="btn small" type="button" data-stk="' + id + '" data-parts="kit">רק קיט (3)</button></div>';
     h += sendBox(o, '');
     if (f.unknown) return h + '<div class="issue warn">המסך הזה פועל בגרסה ישנה ולא מכיר את השלב של ההזמנה. <button class="btn small" type="button" data-reload="1">רענון</button></div></div>';
     if (!del) h += kitHtml(o, f);
@@ -805,7 +805,9 @@
       '<div class="stk-foot">' + (o.num ? 'הזמנה ' + esc(o.num) + ' · ' : '') + 'לסרוק בכל העמסה ופריקה</div></div>';
   }
   function printStickers(o, parts) {
-    $('printArea').innerHTML = '<div class="stks">' + parts.map(function (p) { return stickerHtml(o, p); }).join('') + '</div>';
+    // the kit always goes out with 3 stickers (one per box), the tub with one
+    var pages = []; parts.forEach(function (p) { for (var c = 0; c < (p === 'kit' ? 3 : 1); c++) pages.push(stickerHtml(o, p)); });
+    $('printArea').innerHTML = '<div class="stks">' + pages.join('') + '</div>';
     var ps = document.createElement('style'); ps.id = 'pageSize'; ps.textContent = '@page { size: 100mm 150mm; margin: 0; }'; document.head.appendChild(ps);
     var t = document.title; document.title = 'מדבקות ' + (o.tubNum || ''); window.print(); document.title = t;
     setTimeout(function () { ps.remove(); }, 1500);
