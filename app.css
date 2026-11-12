@@ -305,3 +305,11 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 .rcv-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 44px; }
 .rcv-row strong { min-width: 64px; }
 .rcv-ok { color: var(--ok); font-weight: 600; }
+/* tubs Barkan did not receive: a follow-up list for the office and the Ashdod warehouse */
+.alerts { display: flex; flex-direction: column; gap: 8px; }
+.alert { border: 1.5px solid var(--warn); background: var(--warn-bg); border-radius: 12px; padding: 10px 12px; }
+.alert.bad { border-color: var(--bad); background: var(--bad-bg); }
+.alert ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.alert li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.alink { font: inherit; font-weight: 600; color: var(--ink); background: none; border: 0; padding: 4px 0; text-decoration: underline; cursor: pointer; text-align: start; min-height: 36px; }
+.tubmiss { flex-basis: 100%; color: var(--bad); font-weight: 600; }

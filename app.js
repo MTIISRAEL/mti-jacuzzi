@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-070638';
+  var APP_VERSION = '20261112-071732';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -100,7 +100,8 @@
   // stations a given order skips, and where an order stands (fitting in Ashdod counts as Ashdod)
   function skips(s, o) { return kindOf(o) === 'spa' && ((s.k === 'cladding' && o.install && o.install !== 'above') || (s.k === 'kitSent' && o.equipLoc === 'ashdod')); }
   function nextStage(o) { for (var j = IDX[o.stage] + 1; j < STAGES.length; j++) if (!skips(STAGES[j], o)) return STAGES[j]; return null; }
-  function locOf(s, o) { return s.k === 'equip' && o.equipLoc === 'ashdod' ? 'a2' : s.loc; }
+  // a tub Barkan says it did not get puts the order back on Ashdod's side until Ashdod marks it sent
+  function locOf(s, o) { if (s.k === o.stage && missOpen(o) && !o.tubMissing.sentAt) return 'a1'; return s.k === 'equip' && o.equipLoc === 'ashdod' ? 'a2' : s.loc; }
   function mname(code) { var sm = SPA_MODEL[code]; if (sm) return sm.name + ' · ' + sm.dims; var m = MODEL[code]; return !m ? (code || '') : m.name ? m.name + ' (' + m.dims + ')' : m.code; }
 
   var me = null, col = db.collection('orders'), usersCol = db.collection('users'), apCol = db.collection('approvals'), unsub = [], users = [];
@@ -374,7 +375,7 @@
     if (!del) h += kitHtml(o, f);
     h += rcvHtml(o);
     if (!del && canWrite()) {
-      h += '<div class="who">מי מעדכן עכשיו: ' + f.s.who + '</div>';
+      h += '<div class="who">מי מעדכן עכשיו: ' + (missOpen(o) && !o.tubMissing.sentAt ? 'משרד / מחסן אשדוד: לשלוח את האמבטיה לברקן' : f.s.who) + '</div>';
       if (f.hold) h += '<button class="btn primary big" type="button" data-unhold="' + id + '"' + busy + '>העיכוב הוסר, ממשיכים</button>';
       else {
         if (canAct(f.s) && !(f.s.k === 'toBarkan' && kindOf(o) === 'jacuzzi' && !(o.rcvTub && o.rcvKit))) {
@@ -521,7 +522,7 @@
     var now = new Date();
     $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); applyKind();
     $('banner').hidden = me.role !== 'agent'; if (me.role === 'agent') $('banner').textContent = 'תצוגה בלבד: כאן רואים איפה כל ' + TR.word + ' של הלקוחות שלך ומתי הוא צפוי לרדת.';
-    renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderList(now); renderSide(now); refreshSketchSend();
+    renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderAlerts(); renderList(now); renderSide(now); refreshSketchSend();
     $('foot').textContent = st.loaded ? 'ימי עבודה: א\'–ה\'. חריגה מסומנת כשהזמנה נשארת בשלב יותר מהזמן שהוקצב לו.' : '';
   }
   document.addEventListener('focusout', function () { if (pending) setTimeout(render, 0); });
@@ -540,9 +541,27 @@
   function rcvOn(o) { return kindOf(o) === 'jacuzzi' && o.stage !== 'delivered' && IDX[o.stage] <= IDX.toBarkan; }
   function rcvMark() { return { at: new Date().toISOString(), by: me.email, byName: me.name || me.email }; }
   function rcvChip(o) {
+    var mc = missOpen(o) ? '<span class="chip hold">' + (o.tubMissing.sentAt ? 'אמבטיה נשלחה, לא אושרה בברקן' : 'אמבטיה לא התקבלה בברקן') + '</span>' : '';
+    return mc ? mc + (o.rcvKit && !o.rcvKit.fix ? '<span class="chip ok">בברקן: קיט</span>' : '') : rcvChip2(o);
+  }
+  function rcvChip2(o) {
     if (!rcvOn(o) || (!o.rcvTub && !o.rcvKit && o.stage !== 'toBarkan')) return '';
     var got = [o.rcvTub ? (o.rcvTub.stock ? 'אמבטיה מהמלאי' : 'אמבטיה') : '', o.rcvKit ? 'קיט' : ''].filter(Boolean), miss = [o.rcvTub ? '' : 'אמבטיה', o.rcvKit ? '' : 'קיט'].filter(Boolean);
     return (got.length ? '<span class="chip ok">בברקן: ' + got.join(' + ') + '</span>' : '') + (o.stage === 'toBarkan' && miss.length ? '<span class="chip">עוד לא בברקן: ' + miss.join(' + ') + '</span>' : '');
+  }
+  // "the tub did not arrive": flagged in Barkan, shown to the office and the Ashdod warehouse until Barkan confirms receipt
+  function canSend() { return me && (isOffice() || me.role === 'warehouse'); }
+  function missOpen(o) { return kindOf(o) === 'jacuzzi' && o.tubMissing && !o.rcvTub && o.stage !== 'delivered'; }
+  function missLine(o) { var m = o.tubMissing;
+    return '⚠ ברקן סימנו שהאמבטיה לא התקבלה · ' + fmt(m.at) + (m.byName ? ' · ' + esc(m.byName) : '') + (m.sentAt ? '<br>נשלחה מאשדוד · ' + fmt(m.sentAt) + (m.sentName ? ' · ' + esc(m.sentName) : '') + ' · מחכים לאישור קבלה בברקן' : ''); }
+  function renderAlerts() {
+    var box = $('alerts'), list = canSend() && st.kind === 'jacuzzi' ? st.orders.filter(missOpen) : [];
+    box.hidden = !list.length; if (!list.length) { box.innerHTML = ''; return; }
+    var todo = list.filter(function (o) { return !o.tubMissing.sentAt; }), sent = list.filter(function (o) { return o.tubMissing.sentAt; });
+    function line(o) { return '<li><button type="button" class="alink" data-open="' + esc(o.id) + '">' + esc(titleOf(o)) + (o.tubNum ? ' · סידורי ' + esc(o.tubNum) : '') + ' · ' + esc(mname(o.model)) + '</button> <span class="who">' + (o.tubMissing.sentAt ? 'נשלחה ' + fmt(o.tubMissing.sentAt) : 'מ-' + fmt(o.tubMissing.at)) + '</span>' +
+      (o.tubMissing.sentAt ? '' : ' <button class="btn small" type="button" data-tubsent="' + esc(o.id) + '"' + (st.busy[o.id] ? ' disabled' : '') + '>נשלחה</button>') + '</li>'; }
+    box.innerHTML = (todo.length ? '<div class="alert bad"><strong>צריך לשלוח אמבטיה לברקן (' + todo.length + ')</strong><ul>' + todo.map(line).join('') + '</ul></div>' : '') +
+      (sent.length ? '<div class="alert"><strong>אמבטיות שנשלחו ועוד לא אושרה קבלתן בברקן (' + sent.length + ')</strong><ul>' + sent.map(line).join('') + '</ul></div>' : '');
   }
   function rcvHtml(o) {
     if (!rcvOn(o)) return '';
@@ -552,7 +571,9 @@
       if (r) v = '<span class="rcv-ok">✓ ' + (r.fix ? 'לא נדרש (חזרה לתיקון)' : (r.stock ? 'מהמלאי בברקן' : key === 'rcvTub' ? 'התקבלה מאשדוד' : 'התקבל') + ' · ' + fmt(r.at) + (r.byName ? ' · ' + esc(r.byName) : '')) + '</span>' + (can && !r.fix ? ' <button class="btn small" type="button" data-rcvundo="' + id + '" data-part="' + key + '"' + busy + '>ביטול</button>' : '');
       else if (wait) v = '<span class="who">' + wait + '</span>';
       else v = can ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '"' + busy + '>' + btn + '</button>' +
-        (key === 'rcvTub' ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '" data-stock="1"' + busy + '>יש במלאי בברקן</button>' : '') : '<span class="who">עוד לא התקבל</span>';
+        (key === 'rcvTub' ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '" data-stock="1"' + busy + '>יש במלאי בברקן</button>' +
+          (o.tubMissing ? '' : '<button class="btn danger" type="button" data-tubmiss="' + id + '"' + busy + '>האמבטיה לא התקבלה</button>') : '') : '<span class="who">עוד לא התקבל</span>';
+      if (key === 'rcvTub' && !r && o.tubMissing) v += '<div class="tubmiss">' + missLine(o) + (canSend() && !o.tubMissing.sentAt ? ' <button class="btn small" type="button" data-tubsent="' + id + '"' + busy + '>האמבטיה נשלחה לברקן</button>' : '') + '</div>';
       return '<div class="rcv-row"><strong>' + label + '</strong>' + v + '</div>';
     }
     return '<div class="rcvbox"><h2>קבלה בברקן</h2>' +
@@ -691,7 +712,7 @@
   }
 
   $('sketchView').addEventListener('click', function (ev) { if (ev.target.closest('#skExtra')) onAct(ev); });
-  $('list').addEventListener('click', onAct); $('side').addEventListener('click', onAct);
+  $('list').addEventListener('click', onAct); $('side').addEventListener('click', onAct); $('alerts').addEventListener('click', onAct);
   function onAct(ev) {
     var a = ev.target.closest('a[data-send]'), o;
     if (a && (o = find(a.dataset.send))) { // the link itself opens WhatsApp / SMS / mail; here we only record that it was sent
@@ -718,9 +739,17 @@
     else if (d.rcv && (o = find(d.rcv))) (function (o, part, stock) {
       var other = part === 'rcvTub' ? 'rcvKit' : 'rcvTub', what = part === 'rcvTub' ? 'האמבטיה' : 'הקיט', both = !!o[other] && o.stage === 'toBarkan';
       ask(stock ? 'לקחת אמבטיה מהמלאי בברקן?' : part === 'rcvTub' ? 'האמבטיה התקבלה מאשדוד?' : 'הקיט התקבל בברקן?', orderLine(o) + (both ? stepLine(STAGES[IDX.toBarkan].n, STAGES[IDX.waitBarkan].n) + '<div class="who">גם ' + (part === 'rcvTub' ? 'הקיט' : 'האמבטיה') + ' כבר בברקן, אז ההזמנה עוברת לאיבזור.</div>' : '<div class="who">' + (o[other] ? '' : 'עדיין מחכים ל' + (part === 'rcvTub' ? 'קיט' : 'אמבטיה') + '.') + '</div>') + (stock ? '<div class="who">לא צריך לשלוח אמבטיה מאשדוד.</div>' : ''), stock ? 'כן, יש במלאי' : 'כן, התקבל').then(function (ok) {
-        if (!ok) return; var x = {}; x[part] = rcvMark(); if (stock) x[part].stock = true;
+        if (!ok) return; var x = {}; x[part] = rcvMark(); if (stock) x[part].stock = true; if (part === 'rcvTub') x.tubMissing = null;
         write(o.id, function () { return both ? move(o, 'waitBarkan', (stock || (o.rcvTub && o.rcvTub.stock) ? 'אמבטיה מהמלאי בברקן, הקיט התקבל' : 'האמבטיה והקיט התקבלו בברקן'), x) : col.doc(o.id).update(x); }); });
     })(o, d.part, !!d.stock);
+    else if (d.tubmiss && (o = find(d.tubmiss))) (function (o) {
+      ask('האמבטיה לא התקבלה בברקן?', orderLine(o) + '<p>ההזמנה תופיע במשרד ובמחסן אשדוד ברשימת "צריך לשלוח אמבטיה לברקן", עד שתסמנו כאן שהאמבטיה התקבלה.</p>', 'כן, לא התקבלה', true).then(function (ok) {
+        if (ok) write(o.id, function () { return col.doc(o.id).update({ tubMissing: rcvMark() }); }); });
+    })(o);
+    else if (d.tubsent && (o = find(d.tubsent))) (function (o) {
+      ask('האמבטיה נשלחה לברקן?', orderLine(o) + '<p>ההזמנה תישאר ברשימת המעקב עד שבברקן יאשרו שהאמבטיה התקבלה.</p>', 'כן, נשלחה').then(function (ok) {
+        if (ok) write(o.id, function () { var m = Object.assign({}, o.tubMissing, { sentAt: new Date().toISOString(), sentBy: me.email, sentName: me.name || me.email }); return col.doc(o.id).update({ tubMissing: m }); }); });
+    })(o);
     else if (d.rcvundo && (o = find(d.rcvundo))) (function (o, part) {
       ask('ביטול הקבלה', orderLine(o) + '<p>' + (part === 'rcvTub' ? 'האמבטיה' : 'הקיט') + ' יסומן שוב כ"עוד לא התקבל".</p>', 'כן, לבטל').then(function (ok) { if (!ok) return; var x = {}; x[part] = null; write(o.id, function () { return col.doc(o.id).update(x); }); });
     })(o, d.part);
