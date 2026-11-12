@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-093245';
+  var APP_VERSION = '20261112-093506';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -97,6 +97,10 @@
     return { code: id, name: m.name, dims: m.dims, w: w, h: h, shape: round ? 'round' : 'rect', src: SPA_IMG.indexOf(id) > -1 ? 'img/spa/' + id + '.jpg' : null };
   }
   function drawModel(o) { return kindOf(o) === 'spa' ? spaDrawModel(o.model) : MODEL[o.model] || null; }
+  // right- or left-handed tub (asymmetric models only): from the drawing
+  function sideOf(o) { var m = kindOf(o) === 'jacuzzi' && MODEL[o.model]; if (!m || !m.sides) return ''; var sd = o.sketch && o.sketch.side; return sd === 'R' ? 'ימין' : sd === 'L' ? 'שמאל' : 'צד לא נבחר'; }
+  function sideTxt(o) { var sd = sideOf(o); return !sd ? '' : sd === 'צד לא נבחר' ? sd : 'צד ' + sd; }
+  function omodel(o) { var sd = sideTxt(o); return mname(o.model) + (sd ? ' · ' + sd : ''); }
   function kindOf(o) { return o && o.kind === 'spa' ? 'spa' : 'jacuzzi'; }
   // stations a given order skips, and where an order stands (fitting in Ashdod counts as Ashdod)
   function skips(s, o) { return kindOf(o) === 'spa' && ((s.k === 'cladding' && o.install && o.install !== 'above') || (s.k === 'kitSent' && o.equipLoc === 'ashdod')); }
@@ -350,7 +354,7 @@
     var eta = del ? 'סופק ב-' + fmt(o.stageAt) : f.hold ? 'אספקה צפויה: לא ידוע עד שהעיכוב יוסר'
       : 'בשלב הזה ' + dayWord(f.el) + ' · אספקה צפויה יום ' + DAYS[f.eta.getDay()] + "' " + pad(f.eta.getDate()) + '/' + pad(f.eta.getMonth() + 1);
     var meta = (kindOf(o) === 'spa' ? [mname(o.model), o.equipName, o.acrylic ? 'אקריל ' + pick(SPA.acrylics, o.acrylic) : '', o.cabinet ? 'חיפוי ' + pick(SPA.cabinets, o.cabinet) : '']
-      : [mname(o.model), o.system, o.panel ? 'כולל פאנל' : '']).concat([o.agent ? 'סוכן: ' + o.agent : '']).filter(Boolean).map(esc).join(' · ');
+      : [omodel(o), o.system, o.panel ? 'כולל פאנל' : '']).concat([o.agent ? 'סוכן: ' + o.agent : '']).filter(Boolean).map(esc).join(' · ');
     return '<div class="c-top"><span class="c-cust">' + esc(titleOf(o)) + '</span><span class="c-num">' + [o.tubNum ? 'סידורי ' + esc(o.tubNum) : '', o.num ? 'הזמנה ' + esc(o.num) : ''].filter(Boolean).join(' · ') + '</span></div>' +
       (meta ? '<div class="c-meta">' + meta + '</div>' : '') + '<div class="c-stage">' + chips + '</div>' + (del ? '' : stepsBar(o)) + '<div class="c-eta">' + eta + '</div>';
   }
@@ -565,7 +569,7 @@
     var box = $('alerts'), list = canSend() && st.kind === 'jacuzzi' ? st.orders.filter(missOpen) : [], tr = truckHtml();
     box.hidden = !list.length && !tr; if (!list.length) { box.innerHTML = tr; return; }
     var todo = list.filter(function (o) { return !tubSent(o); }), sent = list.filter(tubSent);
-    function line(o) { return '<li><button type="button" class="alink" data-open="' + esc(o.id) + '">' + esc(titleOf(o)) + (o.tubNum ? ' · סידורי ' + esc(o.tubNum) : '') + ' · ' + esc(mname(o.model)) + '</button> <span class="who">' + (tubSent(o) ? 'נשלחה ' + fmt(o.tubMissing.sentAt) : 'מ-' + fmt((o.tubMissing && o.tubMissing.at) || (o.rcvKit && o.rcvKit.at) || o.stageAt)) + '</span>' +
+    function line(o) { return '<li><button type="button" class="alink" data-open="' + esc(o.id) + '">' + esc(titleOf(o)) + (o.tubNum ? ' · סידורי ' + esc(o.tubNum) : '') + ' · ' + esc(omodel(o)) + '</button> <span class="who">' + (tubSent(o) ? 'נשלחה ' + fmt(o.tubMissing.sentAt) : 'מ-' + fmt((o.tubMissing && o.tubMissing.at) || (o.rcvKit && o.rcvKit.at) || o.stageAt)) + '</span>' +
       (tubSent(o) ? '' : ' <button class="btn small" type="button" data-tubsent="' + esc(o.id) + '"' + (st.busy[o.id] ? ' disabled' : '') + '>נשלחה</button>') + '</li>'; }
     box.innerHTML = (todo.length ? '<div class="alert bad"><strong>צריך לשלוח אמבטיה לברקן (' + todo.length + ')</strong><ul>' + todo.map(line).join('') + '</ul></div>' : '') +
       (sent.length ? '<div class="alert"><strong>אמבטיות שנשלחו ועוד לא אושרה קבלתן בברקן (' + sent.length + ')</strong><ul>' + sent.map(line).join('') + '</ul></div>' : '') + tr;
@@ -733,7 +737,7 @@
     var o = st.all.find(function (x) { return x.id === s.id; });
     var head = PART_N[s.p] + (o && o.tubNum ? ' · ' + o.tubNum : '');
     if (!o) { scanUi.rows.unshift({ cls: 'bad', head: head, text: 'ההזמנה לא נמצאה (אולי נמחקה).' }); beep(false); renderScan(); return; }
-    var who = esc(titleOf(o)) + ' · ' + esc(mname(o.model));
+    var who = esc(titleOf(o)) + ' · ' + esc(omodel(o));
     if (me.role === 'agent') { scanUi.rows.unshift({ cls: '', head: head, text: who + '<br>' + esc(scanState(o, s.p)) }); renderScan(); return; }
     var acts = scanActs(o, s.p), mine = acts.filter(function (a) { return a.who.indexOf(me.role) > -1; });
     if (!acts.length) { scanUi.rows.unshift({ cls: 'warn', head: head, text: who + '<br>' + esc(scanState(o, s.p)) }); beep(false); renderScan(); return; }
@@ -752,7 +756,7 @@
     var b = ev.target.closest('button[data-scan]'); if (!b) return; var r = scanUi.rows[+b.dataset.i];
     if (b.dataset.scan === 'close') { stopCam(); scanUi.open = false; scanUi.rows = []; scanUi.msg = ''; renderScan(); return; }
     if (b.dataset.scan === 'undo' && r && r.prev) { b.disabled = true; col.doc(r.o.id).update(r.prev).then(function () { r.undone = true; r.cls = ''; r.text += ' · <b>בוטל</b>'; renderScan(); }, function () { r.text += ' · הביטול לא נשמר'; renderScan(); }); return; }
-    if (b.dataset.scan === 'do' && r) { var o = st.all.find(function (x) { return x.id === r.o.id; }) || r.o, act = (scanActs(o, r.p).filter(function (a) { return a.k === b.dataset.k; }))[0]; if (!act) return; r.o = o; r.who = esc(titleOf(o)) + ' · ' + esc(mname(o.model)); runAct(r, act); }
+    if (b.dataset.scan === 'do' && r) { var o = st.all.find(function (x) { return x.id === r.o.id; }) || r.o, act = (scanActs(o, r.p).filter(function (a) { return a.k === b.dataset.k; }))[0]; if (!act) return; r.o = o; r.who = esc(titleOf(o)) + ' · ' + esc(omodel(o)); runAct(r, act); }
   }
   // camera scanning, where the browser can read QR codes itself (Chrome on Android)
   function canCam() { return 'BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia; }
@@ -786,12 +790,12 @@
     var t = truckList(); if (!t.length) return '';
     return '<div class="alert truck"><strong>על המשאית עכשיו (' + t.length + ')</strong><ul>' + t.map(function (x) {
       var late = (Date.now() - new Date(x.l.t)) > 20 * 3600 * 1000;
-      return '<li><button type="button" class="alink" data-open="' + esc(x.o.id) + '">' + PART_N[x.p] + (x.o.tubNum ? ' ' + esc(x.o.tubNum) : '') + ' · ' + esc(titleOf(x.o)) + '</button> <span class="who">' + (x.l.at === 'truckB' ? 'לברקן' : 'לאשדוד') + ' · עלה ' + fmt(x.l.t) + (x.l.byName ? ' · ' + esc(x.l.byName) : '') + '</span>' + (late ? ' <span class="chip hold">עלה ולא נסרק בירידה</span>' : '') + '</li>'; }).join('') + '</ul></div>';
+      return '<li><button type="button" class="alink" data-open="' + esc(x.o.id) + '">' + PART_N[x.p] + (x.o.tubNum ? ' ' + esc(x.o.tubNum) : '') + ' · ' + esc(titleOf(x.o)) + ' · ' + esc(omodel(x.o)) + '</button> <span class="who">' + (x.l.at === 'truckB' ? 'לברקן' : 'לאשדוד') + ' · עלה ' + fmt(x.l.t) + (x.l.byName ? ' · ' + esc(x.l.byName) : '') + '</span>' + (late ? ' <span class="chip hold">עלה ולא נסרק בירידה</span>' : '') + '</li>'; }).join('') + '</ul></div>';
   }
   // stickers: 100 x 150 mm, portrait, one per page
   function stickerHtml(o, p) {
     return '<div class="stk"><div class="stk-top"><span class="stk-brand">MTI</span><span class="stk-part">' + PART_N[p] + '</span></div>' +
-      '<div class="stk-num">' + esc(o.tubNum || '----') + '</div><div class="stk-model">' + esc(mname(o.model)) + (o.system ? ' · ' + esc(o.system) : '') + '</div>' +
+      '<div class="stk-num">' + esc(o.tubNum || '----') + '</div><div class="stk-model">' + esc(mname(o.model)) + (o.system ? ' · ' + esc(o.system) : '') + '</div>' + (sideOf(o) ? '<div class="stk-side">' + sideTxt(o) + '</div>' : '') +
       '<div class="stk-cust">' + esc(titleOf(o)) + '</div><div class="stk-qr">' + MTIQR.svg(scanUrl(o, p)) + '</div>' +
       '<div class="stk-foot">' + (o.num ? 'הזמנה ' + esc(o.num) + ' · ' : '') + 'לסרוק בכל העמסה ופריקה</div></div>';
   }
