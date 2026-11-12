@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-102410';
+  var APP_VERSION = '20261112-111952';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -590,7 +590,8 @@
   // "the tub did not arrive": flagged in Barkan, shown to the office and the Ashdod warehouse until Barkan confirms receipt
   function canSend() { return me && (isOffice() || me.role === 'warehouse'); }
   // also open on its own once the kit is in Barkan and the tub is not: then the tub is Ashdod's job
-  function missOpen(o) { return kindOf(o) === 'jacuzzi' && !o.rcvTub && o.stage !== 'delivered' && !!(o.tubMissing || (o.stage === 'toBarkan' && o.rcvKit)); }
+  // once the tub is scanned onto the truck it is no longer Ashdod's job: it shows under "on the truck now" instead
+  function missOpen(o) { return kindOf(o) === 'jacuzzi' && !o.rcvTub && o.stage !== 'delivered' && !(o.tubLoc && o.tubLoc.at === 'truckB') && !!(o.tubMissing || (o.stage === 'toBarkan' && o.rcvKit)); }
   function tubSent(o) { return !!(o.tubMissing && o.tubMissing.sentAt); }
   function missLine(o) { var m = o.tubMissing || {};
     var head = m.at ? '⚠ ברקן סימנו שהאמבטיה לא התקבלה · ' + fmt(m.at) + (m.byName ? ' · ' + esc(m.byName) : '') : '⚠ הקיט כבר בברקן והאמבטיה עוד לא התקבלה' + (o.rcvKit && o.rcvKit.at ? ' · הקיט התקבל ' + fmt(o.rcvKit.at) : '');
