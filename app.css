@@ -256,9 +256,12 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
   #printArea .p-serial { text-align: center; border: 2pt solid #000; padding: 4pt 14pt; }
   #printArea .p-serial span { display: block; font-size: 9pt; }
   #printArea .p-serial b { font-size: 30pt; line-height: 1; letter-spacing: .04em; }
-  #printArea .p-sketch { margin: 0 auto 10pt; text-align: center; }
-  #printArea .p-sketch svg { width: 100%; height: auto; max-height: 128mm; direction: ltr; }
-  #printArea .p-sketch + table td { font-size: 12pt; }
+  /* the fitter's sheet keeps the drawing and the parts table on one page: the drawing shrinks to the room left over */
+  #printArea .p-page { height: 266mm; display: flex; flex-direction: column; overflow: hidden; }
+  #printArea .p-page > * { flex: none; }
+  #printArea .p-page > .p-sketch { flex: 1 1 auto; min-height: 40mm; margin: 0 0 8pt; display: flex; justify-content: center; }
+  #printArea .p-sketch svg { width: 100%; height: 100%; direction: ltr; }
+  #printArea .p-sketch + table td { font-size: 12pt; padding-top: 3pt; padding-bottom: 3pt; }
   #printArea .p-sign { display: flex; justify-content: space-between; margin-top: 28pt; font-size: 11pt; }
 }
 
