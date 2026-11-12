@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-072135';
+  var APP_VERSION = '20261112-072352';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -644,7 +644,7 @@
   function tagPage(o) {
     var sm = SPA_MODEL[o.model], code = sm ? ((sm.name.match(/MTI-\d+/) || [''])[0]) : (o.model || '');
     code = code.replace(/^MTI-?\s*/, 'MTI - ');
-    var one = '<div class="p-tag"><div class="p-tag-n"><small>#</small>' + esc(o.tubNum || '') + '</div><div class="p-tag-m">' + esc(code) + '</div></div>';
+    var one = '<div class="p-tag"><div class="p-tag-in"><div class="p-tag-n"><small>#</small>' + esc(o.tubNum || '') + '</div><div class="p-tag-m">' + esc(code) + '</div></div></div>';
     return '<div class="p-tags">' + one + one + one + one + '</div>';
   }
   // A4 sheet of one order's kit, sent to the browser's print dialog (where it can also be saved as PDF)
