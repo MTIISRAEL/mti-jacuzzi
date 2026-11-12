@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-072019';
+  var APP_VERSION = '20261112-072135';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Barkan is split into waiting and fitting on purpose:
@@ -14,7 +14,8 @@
     { k: 'kit',        n: 'הכנת קיט במחסן',       loc: 'a1',   who: 'מחסן אשדוד',  roles: ['warehouse'],                     t: 1, done: 'הקיט מוכן והועמס לברקן' },
     { k: 'toBarkan',   n: 'בדרך לברקן',           loc: 'road', who: 'מנהל ברקן',   roles: ['barkan', 'driver'],              t: 1, done: 'התקבל בברקן' },
     { k: 'waitBarkan', n: 'ממתין לאיבזור בברקן',  loc: 'bk',   who: 'מנהל ברקן',   roles: ['barkan'],                        t: 3, done: 'התחלנו לאבזר' },
-    { k: 'fitting',    n: 'באיבזור בברקן',        loc: 'bk',   who: 'מנהל ברקן',   roles: ['barkan'],                        t: 1, done: 'האיבזור הסתיים והועמס לאשדוד' },
+    { k: 'fitting',    n: 'באיבזור בברקן',        loc: 'bk',   who: 'מנהל ברקן',   roles: ['barkan'],                        t: 1, done: 'האיבזור הסתיים' },
+    { k: 'loadBk',     n: 'מוכן להעמסה בברקן',     loc: 'bk',   who: 'מנהל ברקן',   roles: ['barkan', 'driver'],              t: 1, done: 'הועמס על המשאית לאשדוד' },
     { k: 'toAshdod',   n: 'בדרך חזרה לאשדוד',     loc: 'road', who: 'מחסן אשדוד',  roles: ['warehouse', 'driver'],           t: 1, done: 'התקבל באשדוד' },
     { k: 'inspect',    n: 'בדיקה חיצונית',        loc: 'a2',   who: 'מחסן אשדוד',  roles: ['warehouse'],                     t: 1, done: 'הבדיקה עברה' },
     { k: 'pack',       n: 'אריזה מחדש',           loc: 'a2',   who: 'מחסן אשדוד',  roles: ['warehouse'],                     t: 1, done: 'ארוז ומוכן לאספקה' },
