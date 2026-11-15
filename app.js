@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261115-130704';
+  var APP_VERSION = '20261115-130823';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -592,7 +592,7 @@
   function urgentHtml(o) {
     if (kindOf(o) !== 'jacuzzi' || o.stage === 'delivered') return '';
     var id = esc(o.id), busy = st.busy[o.id] ? ' disabled' : '', h = '';
-    if (isOffice()) h += o.urgent ? '<div class="row"><span class="chip urgent">דחוף' + (o.urgent.need ? ' · צריך עד ' + dmy(o.urgent.need) : '') + '</span><button class="btn small" type="button" data-urg="' + id + '"' + busy + '>שינוי</button><button class="btn small" type="button" data-unurg="' + id + '"' + busy + '>כבר לא דחוף</button></div>'
+    if (isOffice()) h += o.urgent ? '<div class="row"><span class="chip urgent">דחוף' + (o.urgent.need ? ' · צריך עד ' + dmy(o.urgent.need) : '') + '</span><button class="btn small" type="button" data-unurg="' + id + '"' + busy + '>כבר לא דחוף</button></div>'
       : '<button class="btn" type="button" data-urg="' + id + '"' + busy + '>סימון כדחוף לברקן</button>';
     if (inBarkan(o) && (me.role === 'barkan' || isAdmin())) h += '<div class="row etarow"><label for="eta-' + id + '">מתי יוצא מברקן</label><input id="eta-' + id + '" type="date" value="' + esc((o.bkEta && o.bkEta.date) || '') + '"><button class="btn small primary" type="button" data-eta="' + id + '"' + busy + '>שמירה</button></div>' +
       (o.bkEta && o.bkEta.at ? '<div class="who">עודכן ' + fmt(o.bkEta.at) + (o.bkEta.byName ? ' · ' + esc(o.bkEta.byName) : '') + '</div>' : '');
@@ -1036,8 +1036,8 @@
         if (ok) write(o.id, function () { var m = Object.assign({}, o.tubMissing, { sentAt: new Date().toISOString(), sentBy: me.email, sentName: me.name || me.email }); return col.doc(o.id).update({ tubMissing: m }); }); });
     })(o);
     else if (d.urg && (o = find(d.urg))) (function (o) {
-      ask('דחוף לברקן', orderLine(o) + '<p>ההזמנה תופיע בראש הרשימה ובתיבה "דחוף לברקן", ושלומי יתבקש לעדכן מתי היא יוצאת מברקן.</p><label class="f" for="urgNeed">צריך עד (לא חובה)<input id="urgNeed" type="date" value="' + esc((o.urgent && o.urgent.need) || '') + '"></label>', 'סימון כדחוף').then(function (ok) {
-        if (!ok) return; var need = (ask.vals && ask.vals.urgNeed) || '';
+      ask('דחוף לברקן', orderLine(o) + '<p>ההזמנה תופיע בראש הרשימה ובתיבה "דחוף לברקן", ושלומי יתבקש לעדכן מתי היא יוצאת מברקן.</p>', 'סימון כדחוף').then(function (ok) {
+        if (!ok) return; var need = '';
         write(o.id, function () { return col.doc(o.id).update({ urgent: { need: need, at: new Date().toISOString(), by: me.email, byName: me.name || me.email } }); }); });
     })(o);
     else if (d.unurg && (o = find(d.unurg))) write(o.id, function () { return col.doc(o.id).update({ urgent: null }); });
