@@ -19,6 +19,8 @@ window.Sketch = (function () {
     btn:     { name: 'כפתור הפעלה', r: 2.1, tag: 'כפתור', max: 2 },
     // head pillow with brackets: 30×9 cm, fixed with 2 drill holes; drawn for the fitter, not a kit part
     pillow:  { name: 'כרית ראש', r: 15, w: 30, h: 9, tag: 'כרית', max: 4 },
+    // mini LEDs: small points; one system (item 48666) has 12 of them, controller and extension cables included
+    mled:    { name: 'מיני לד', r: 1.3, tag: 'לד', max: 12 },
     // spa parts (sizes in cm, colours as in the older spa system); w/h make a panel rectangle instead of a circle
     s_j2:    { name: 'ג\'ט 2"', r: 2.5, c: '#facc15', spa: 1 },
     s_j3:    { name: 'ג\'ט 3"', r: 3.8, c: '#84cc16', spa: 1 },
@@ -153,6 +155,7 @@ window.Sketch = (function () {
         return '<circle r="' + ST.r + '" fill="' + ST.c + '" stroke="#fff" stroke-width="' + (ST.r > 3 ? .6 : .35) + '"/><circle r="' + (ST.r * 0.35) + '" fill="rgba(255,255,255,.55)"/>';
       }
       if (t === 'light') return '<circle r="2.6" fill="#fff6cf" stroke="#b8860b" stroke-width=".6"/><circle r="1.1" fill="#f2b705"/><path d="M0 -2.1V-1.5M0 2.1V1.5M-2.1 0H-1.5M2.1 0H1.5" stroke="#b8860b" stroke-width=".4"/>' + tag;
+      if (t === 'mled') return '<circle r="1.3" fill="#fff1a8" stroke="#b8860b" stroke-width=".45"/><circle r=".5" fill="#f2b705"/>';
       if (t === 'pillow') return '<rect x="-15" y="-4.5" width="30" height="9" rx="4" fill="#4a4e55" stroke="#22252a" stroke-width=".5"/>' +
         '<circle cx="-10" r="1.5" fill="#fff" stroke="#d62828" stroke-width=".6"/><circle cx="10" r="1.5" fill="#fff" stroke="#d62828" stroke-width=".6"/>' +
         '<path d="M-11 0h2M-10 -1v2M9 0h2M10 -1v2" stroke="#d62828" stroke-width=".35"/>' + (small ? '' : '<text class="t-lbl" style="font-size:3.2px" text-anchor="middle" y="1.1" fill="#fff">כרית</text>');
@@ -321,7 +324,7 @@ window.Sketch = (function () {
       $('skPalWrap').hidden = readOnly;
       var nj = S.items.filter(function (i) { return i.type === 'jet' || /^s_j/.test(i.type); }).length;
       $('skPalWrap').querySelector('h2').textContent = 'הוספת פריט' + (jetsStd ? " · ג'טים: " + nj + ' מתוך ' + jetsStd : " · ג'טים: " + nj);
-      $('skPal').innerHTML = (SPA ? Object.keys(TYPES).filter(function (k) { return TYPES[k].spa; }).map(function (k) { return [k]; }) : [['jet', 2], ['jet', 3], ['light'], ['pillow'], ['faucet'], ['shower'], ['service'], ['reg'], ['btn']]).map(function (p) {
+      $('skPal').innerHTML = (SPA ? Object.keys(TYPES).filter(function (k) { return TYPES[k].spa; }).map(function (k) { return [k]; }) : [['jet', 2], ['jet', 3], ['light'], ['mled'], ['pillow'], ['faucet'], ['shower'], ['service'], ['reg'], ['btn']]).map(function (p) {
         var t = p[0], demo = { type: t, size: p[1] }, have = S.items.filter(function (i) { return i.type === t; }).length, full = have >= (t === 'light' ? 1 : TYPES[t].max || 99);
         var vb = t === 'service' ? '-22 -8 44 16' : t === 'pillow' ? '-16 -16 32 32' : t === 'motor' ? '-13 -10 26 20' : TYPES[t].spa ? (TYPES[t].w ? (-TYPES[t].w / 2 - 1) + ' ' + (-TYPES[t].w / 2 - 1) + ' ' + (TYPES[t].w + 2) + ' ' + (TYPES[t].w + 2) : (-TYPES[t].r - 1) + ' ' + (-TYPES[t].r - 1) + ' ' + (2 * TYPES[t].r + 2) + ' ' + (2 * TYPES[t].r + 2)) : '-5 -5 10 10';
         return '<button class="btn" type="button" data-add="' + t + '"' + (p[1] ? ' data-size="' + p[1] + '"' : '') + (full ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol(demo, true) + '</svg><span>' + nameOf(demo) + '</span></button>'; }).join('');
@@ -407,6 +410,7 @@ window.Sketch = (function () {
       else if (t === 'motor') place(it, 22, H - 22);
       else if (t === 'light') place(it, W / 2, H * 0.3);
       else if (t === 'pillow') place(it, W * 0.3 + n * 36, 10);
+      else if (t === 'mled') place(it, W * 0.15 + (n % 6) * W * 0.14, n < 6 ? H * 0.22 : H * 0.78);
       else if (TYPES[t].spa) { var na = S.items.filter(function (i) { return !i.std; }).length; place(it, W * 0.2 + (na % 8) * W * 0.08, TYPES[t].w ? 8 : H * 0.4 + Math.floor(na / 8) % 4 * 14); } // spread new parts so they do not land on each other
       else if (t === 'reg' || t === 'btn') place(it, W * (t === 'reg' ? 0.14 : 0.36) + n * 13, 3.6);
       else place(it, W * 0.4 + (n % 6) * 8, H / 2);
@@ -466,6 +470,7 @@ window.Sketch = (function () {
     // with a light there are two control buttons (pump + light), without it one
     out.push({ n: PARTS.button[f][0], q: data.light === true ? 2 : 1, sku: PARTS.button[f][1] });
     if (data.light === true) out.push({ n: PARTS.light[0], q: 1, sku: PARTS.light[1] });
+    if (c.mled) out.push({ n: 'מערכת מיני לד (12 נורות) 7 צבעים כולל בקר+מאריכים · ' + c.mled + ' נקודות בשרטוט', q: Math.ceil(c.mled / 12), sku: '48666' });
     [2, 3].forEach(function (z) { if (!c['jet' + z]) return;
       if (data.series === 'prime') out.push({ n: "ג'ט " + z + '" PRIME (CMP) מתכוונן', q: c['jet' + z], sku: PARTS.prime[z] });
       else out.push({ n: "ג'ט " + z + '" BALBOA ' + fin + ' (מסגרת ניקל)', q: c['jet' + z], sku: PARTS.jet[f][z] }); });
