@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261112-141548';
+  var APP_VERSION = '20261115-102816';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -14,17 +14,17 @@
     { k: 'fitting',    n: 'באיבזור בברקן',        loc: 'bk',   who: 'מנהל ברקן',   roles: ['barkan'],                        t: 4, done: 'האיבזור הסתיים' },
     { k: 'loadBk',     n: 'מוכן להעמסה בברקן',     loc: 'bk',   who: 'מנהל ברקן',   roles: ['barkan', 'driver'],              t: 1, done: 'הועמס על המשאית לאשדוד' },
     { k: 'toAshdod',   n: 'בדרך חזרה לאשדוד',     loc: 'road', who: 'מחסן אשדוד',  roles: ['warehouse', 'driver'],           t: 1, done: 'התקבל באשדוד' },
-    { k: 'inspect',    n: 'בדיקה ואריזה',         loc: 'a2',   who: 'מחסן אשדוד',  roles: ['warehouse'],                     t: 1, done: 'נבדק ונארז' },
-    { k: 'ready',      n: 'מוכן לאספקה',          loc: 'a2',   who: 'נהגים',       roles: ['driver', 'warehouse', 'office'], t: 2, done: 'סופק ללקוח' },
-    { k: 'delivered',  n: 'סופק',                 loc: 'done', who: '',            roles: [],                                t: 0, done: '' }
+    { k: 'inspect',    n: 'בדיקה ואריזה',         loc: 'a2',   who: 'מחסן אשדוד',  roles: ['warehouse'],                     t: 1, done: 'נבדק ונארז, יוצא לאספקה' },
+    // after the check the jacuzzi goes out for delivery and is not followed any further (for now)
+    { k: 'delivered',  n: 'יצא לאספקה',           loc: 'done', who: '',            roles: [],                                t: 0, done: '' }
   ];
   // stages that were merged on 12 Nov 2026: an order still standing on one is read as standing on the merged stage
   var SCAN_HINT = {
     kit: 'עובר לבד כשהנהג סורק את מדבקת הקיט בעלייה למשאית.',
     toBarkan: 'עובר לאיבזור כשבברקן סורקים את מדבקת האמבטיה ואת מדבקת הקיט.'
   };
-  var J_OLD = { request: 'drawing', kitOrder: 'kit', waitBarkan: 'fitting', pack: 'inspect' };
-  var J_OLD_N = { request: 'בקשת אספקה', kitOrder: 'הזמנת קיט למחסן', waitBarkan: 'ממתין לאיבזור בברקן', pack: 'אריזה מחדש' };
+  var J_OLD = { request: 'drawing', kitOrder: 'kit', waitBarkan: 'fitting', pack: 'inspect', ready: 'delivered' };
+  var J_OLD_N = { ready: 'מוכן לאספקה', request: 'בקשת אספקה', kitOrder: 'הזמנת קיט למחסן', waitBarkan: 'ממתין לאיבזור בברקן', pack: 'אריזה מחדש' };
   // Spa and swim spa: the 15 stations of the older spa system. Kobi (an admin) signs off the technical review.
   // Cladding is skipped unless the spa stands above ground; "kit sent to Barkan" is skipped when fitting is done in Ashdod.
   var S_STAGES = [
@@ -53,7 +53,7 @@
     { k: 'a1',   n: 'אשדוד · הכנה',           c: 'var(--ashdod)' },
     { k: 'road', n: 'בדרך במשאית',            c: 'var(--road)' },
     { k: 'bk',   n: 'ברקן',                   c: 'var(--barkan)' },
-    { k: 'a2',   n: 'אשדוד · בדיקה ואספקה',   c: 'var(--back)' }
+    { k: 'a2',   n: 'אשדוד · בדיקה',          c: 'var(--back)' }
   ];
   // the two trackers. kitStage: where the office builds the kit list; kitFrom..kitTo: where the frozen list is shown.
   var TRACK = {
@@ -342,7 +342,7 @@
     var nDel = st.orders.filter(function (o) { return o.stage === 'delivered'; }).length;
     $('tabs').innerHTML =
       '<button class="btn small' + (st.tab === 'open' ? ' primary' : '') + '" type="button" data-tab="open">פתוחות (' + (st.orders.length - nDel) + ')</button>' +
-      '<button class="btn small' + (st.tab === 'done' ? ' primary' : '') + '" type="button" data-tab="done">סופקו (' + nDel + ')</button>' +
+      '<button class="btn small' + (st.tab === 'done' ? ' primary' : '') + '" type="button" data-tab="done">' + (st.kind === 'spa' ? 'סופקו' : 'יצאו לאספקה') + ' (' + nDel + ')</button>' +
       (st.loc || st.stageF ? '<button class="btn small" type="button" data-loc-clear="1">הצג הכול</button>' : '');
   }
   // where the tub is at a stage: a1 still in Ashdod, bk in Barkan, a2 back in Ashdod; a truck ride counts as its destination
@@ -370,7 +370,7 @@
     if (ca && ca.status === 'changes') chips += '<span class="chip hold">הלקוח ביקש שינוי</span>';
     else if (o.stage === 'approval' && o.approvalSentAt) chips += '<span class="chip">נשלח ללקוח</span>';
     chips += rcvChip(o);
-    var eta = del ? 'סופק ב-' + fmt(o.stageAt) : f.hold ? 'אספקה צפויה: לא ידוע עד שהעיכוב יוסר'
+    var eta = del ? (kindOf(o) === 'spa' ? 'סופק ב-' : 'יצא לאספקה ב-') + fmt(o.stageAt) : f.hold ? 'אספקה צפויה: לא ידוע עד שהעיכוב יוסר'
       : 'בשלב הזה ' + dayWord(f.el) + ' · אספקה צפויה יום ' + DAYS[f.eta.getDay()] + "' " + pad(f.eta.getDate()) + '/' + pad(f.eta.getMonth() + 1);
     var meta = (kindOf(o) === 'spa' ? [mname(o.model), o.equipName, o.acrylic ? 'אקריל ' + pick(SPA.acrylics, o.acrylic) : '', o.cabinet ? 'חיפוי ' + pick(SPA.cabinets, o.cabinet) : '']
       : [omodel(o), o.system, o.panel ? 'כולל פאנל' : '']).concat([o.agent ? 'סוכן: ' + o.agent : '']).filter(Boolean).map(esc).join(' · ');
@@ -982,7 +982,7 @@
     else if (d.open) { st.openId = st.openId === d.open ? null : d.open; st.holdFor = null; render(); if (WIDE) $('side').scrollTop = 0; }
     else if (d.sketch && (o = find(d.sketch))) { if (o.sketch || canDraw(o)) openSketch(o); }
     else if (d.next && (o = find(d.next))) { var nx = nextStage(o), cur = STAGES[IDX[o.stage]]; if (nx && canAct(cur)) (function (o, nx, cur) {
-      var extra = o.stage === TR.kitStage ? '<div class="who">' + (kindOf(o) === 'spa' ? 'רשימת הקיט תינעל ותעבור למחסן כמו שהיא עכשיו.' : 'רשימת הקיט תינעל כמו שהיא עכשיו.') + '</div>' : nx.k === 'delivered' ? '<div class="who">ההזמנה תעבור לרשימת "סופקו".</div>' : '';
+      var extra = o.stage === TR.kitStage ? '<div class="who">' + (kindOf(o) === 'spa' ? 'רשימת הקיט תינעל ותעבור למחסן כמו שהיא עכשיו.' : 'רשימת הקיט תינעל כמו שהיא עכשיו.') + '</div>' : nx.k === 'delivered' ? '<div class="who">ההזמנה תעבור לרשימת "' + (kindOf(o) === 'spa' ? 'סופקו' : 'יצאו לאספקה') + '" ולא תופיע יותר במעקב.</div>' : '';
       ask(cur.done + '?', orderLine(o) + stepLine(cur.n, nx.n) + '<div class="who">מי ממשיך: ' + esc(nx.who || '—') + '</div>' + extra, 'כן, ' + cur.done).then(function (ok) { if (!ok) return;
         // the return trip is marked by button for now (no sticker printer in Barkan): keep the "on the truck" list right too
         var ex = o.stage === TR.kitStage ? { kitList: kitNow(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; }) } : null;
