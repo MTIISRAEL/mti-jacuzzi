@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261115-103229';
+  var APP_VERSION = '20261115-130704';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -311,7 +311,7 @@
       return true;
     }).map(function (o) { return { o: o, f: info(o, now) }; }).sort(function (a, b) {
       if (st.tab !== 'open') return String(b.o.stageAt).localeCompare(String(a.o.stageAt));
-      return (b.f.hold - a.f.hold) || (b.f.late - a.f.late) || (b.f.over - a.f.over) || (b.f.i - a.f.i);
+      return (!!b.o.urgent - !!a.o.urgent) || (b.f.hold - a.f.hold) || (b.f.late - a.f.late) || (b.f.over - a.f.over) || (b.f.i - a.f.i);
     });
   }
   function renderTiles(now) {
@@ -369,7 +369,7 @@
     var ca = custAnswer(o);
     if (ca && ca.status === 'changes') chips += '<span class="chip hold">הלקוח ביקש שינוי</span>';
     else if (o.stage === 'approval' && o.approvalSentAt) chips += '<span class="chip">נשלח ללקוח</span>';
-    chips += rcvChip(o);
+    chips += rcvChip(o) + urgentChips(o);
     var eta = del ? (kindOf(o) === 'spa' ? 'סופק ב-' : 'יצא לאספקה ב-') + fmt(o.stageAt) : f.hold ? 'אספקה צפויה: לא ידוע עד שהעיכוב יוסר'
       : 'בשלב הזה ' + dayWord(f.el) + ' · אספקה צפויה יום ' + DAYS[f.eta.getDay()] + "' " + pad(f.eta.getDate()) + '/' + pad(f.eta.getMonth() + 1);
     var meta = (kindOf(o) === 'spa' ? [mname(o.model), o.equipName, o.acrylic ? 'אקריל ' + pick(SPA.acrylics, o.acrylic) : '', o.cabinet ? 'חיפוי ' + pick(SPA.cabinets, o.cabinet) : '']
@@ -393,6 +393,7 @@
     if (kindOf(o) === 'spa') h += spaSpec(o);
     else { var al = addonLines(o).map(function (x) { return x.n + (x.q > 1 ? ' ×' + x.q : ''); }); if (o.waste && o.waste !== 'chrome') al.push('אביק ' + pick(ADD.waste, o.waste)); if (al.length) h += '<dl class="spec"><dt>תוספות</dt><dd>' + al.map(esc).join('<br>') + '</dd></dl>'; }
     if (isOffice() && !del) h += '<button class="btn" type="button" data-edit="' + id + '">עריכת פרטי ההזמנה</button>';
+    h += urgentHtml(o);
     if (canWrite()) h += '<div class="row tubrow"><label for="tn-' + id + '">מספר סידורי</label><input id="tn-' + id + '" inputmode="numeric" maxlength="' + (kindOf(o) === 'spa' ? 8 : 4) + '" autocomplete="off" value="' + esc(o.tubNum || '') + '"><button class="btn small" type="button" data-savetub="' + id + '">שמור</button></div>';
     if (drawModel(o)) h += '<button class="btn" type="button" data-sketch="' + id + '">' + (o.sketch ? (canDraw(o) ? 'עריכת השרטוט' : 'צפייה בשרטוט') : (canDraw(o) ? 'יצירת שרטוט' : 'אין עדיין שרטוט')) + '</button>';
     if (drawModel(o) && o.sketch && me.role !== 'agent') h += '<button class="btn" type="button" data-skprint="' + id + '">הדפסת סקיצה למאבזר</button>';
@@ -570,6 +571,34 @@
   // before the kit is ready. The order leaves "on the way to Barkan" only when both are there.
   function rcvOn(o) { return kindOf(o) === 'jacuzzi' && o.stage !== 'delivered' && IDX[o.stage] <= IDX.toBarkan; }
   function rcvMark() { return { at: new Date().toISOString(), by: me.email, byName: me.name || me.email }; }
+  // Urgent orders and Barkan's promised date: the office marks an order urgent (optionally "needed by"),
+  // Shlomi sees it on top and answers with the day the jacuzzi will be ready to leave Barkan.
+  function dmy(d) { if (!d) return ''; var p = String(d).split('-'); return p.length === 3 ? +p[2] + '/' + +p[1] : d; }
+  function inBarkan(o) { return kindOf(o) === 'jacuzzi' && o.stage !== 'delivered' && IDX[o.stage] <= IDX.loadBk; }
+  function bkEtaLate(o) { return o.bkEta && o.bkEta.date && IDX[o.stage] <= IDX.loadBk && o.bkEta.date < new Date().toISOString().slice(0, 10); }
+  function urgentChips(o) {
+    var h = '';
+    if (o.urgent && o.stage !== 'delivered') h += '<span class="chip urgent">דחוף' + (o.urgent.need ? ' · עד ' + dmy(o.urgent.need) : '') + '</span>';
+    if (o.bkEta && o.bkEta.date && inBarkan(o)) h += '<span class="chip' + (bkEtaLate(o) ? ' late' : '') + '">יוצא מברקן: ' + dmy(o.bkEta.date) + '</span>';
+    return h;
+  }
+  function urgentBox() {
+    if (!me || me.role === 'agent' || st.kind !== 'jacuzzi') return '';
+    var list = st.orders.filter(function (o) { return o.urgent && inBarkan(o); }); if (!list.length) return '';
+    return '<div class="alert urgent"><strong>דחוף לברקן (' + list.length + ')</strong><ul>' + list.map(function (o) {
+      var eta = o.bkEta && o.bkEta.date ? 'יוצא מברקן: ' + dmy(o.bkEta.date) + (o.bkEta.byName ? ' (' + esc(o.bkEta.byName) + ')' : '') : '<b>שלומי עוד לא עדכן מתי יוצא</b>';
+      return '<li><button type="button" class="alink" data-open="' + esc(o.id) + '">' + (o.tubNum ? esc(o.tubNum) + ' · ' : '') + esc(omodel(o)) + ' · ' + esc(titleOf(o)) + '</button> <span class="who">' + esc((STAGES[IDX[o.stage]] || {}).n || '') + (o.urgent.need ? ' · צריך עד ' + dmy(o.urgent.need) : '') + ' · ' + eta + '</span></li>'; }).join('') + '</ul></div>';
+  }
+  function urgentHtml(o) {
+    if (kindOf(o) !== 'jacuzzi' || o.stage === 'delivered') return '';
+    var id = esc(o.id), busy = st.busy[o.id] ? ' disabled' : '', h = '';
+    if (isOffice()) h += o.urgent ? '<div class="row"><span class="chip urgent">דחוף' + (o.urgent.need ? ' · צריך עד ' + dmy(o.urgent.need) : '') + '</span><button class="btn small" type="button" data-urg="' + id + '"' + busy + '>שינוי</button><button class="btn small" type="button" data-unurg="' + id + '"' + busy + '>כבר לא דחוף</button></div>'
+      : '<button class="btn" type="button" data-urg="' + id + '"' + busy + '>סימון כדחוף לברקן</button>';
+    if (inBarkan(o) && (me.role === 'barkan' || isAdmin())) h += '<div class="row etarow"><label for="eta-' + id + '">מתי יוצא מברקן</label><input id="eta-' + id + '" type="date" value="' + esc((o.bkEta && o.bkEta.date) || '') + '"><button class="btn small primary" type="button" data-eta="' + id + '"' + busy + '>שמירה</button></div>' +
+      (o.bkEta && o.bkEta.at ? '<div class="who">עודכן ' + fmt(o.bkEta.at) + (o.bkEta.byName ? ' · ' + esc(o.bkEta.byName) : '') + '</div>' : '');
+    else if (o.bkEta && o.bkEta.date && inBarkan(o)) h += '<div class="who">יוצא מברקן: ' + dmy(o.bkEta.date) + (o.bkEta.byName ? ' (עדכן ' + esc(o.bkEta.byName) + ')' : '') + '</div>';
+    return h;
+  }
   // one plain line on the card: where the tub and the kit are right now, until both are in Barkan
   function pieceAt(o, p) {
     var r = p === 'tub' ? o.rcvTub : o.rcvKit, l = o[p + 'Loc'];
@@ -595,11 +624,11 @@
     var head = m.at ? '⚠ ברקן סימנו שהאמבטיה לא התקבלה · ' + fmt(m.at) + (m.byName ? ' · ' + esc(m.byName) : '') : '⚠ הקיט כבר בברקן והאמבטיה עוד לא התקבלה' + (o.rcvKit && o.rcvKit.at ? ' · הקיט התקבל ' + fmt(o.rcvKit.at) : '');
     return head + (m.sentAt ? '<br>נסרקה בעלייה למשאית · ' + fmt(m.sentAt) + (m.sentName ? ' · ' + esc(m.sentName) : '') + ' · מחכים לאישור קבלה בברקן' : ''); }
   function renderAlerts() {
-    var box = $('alerts'), list = canSend() && st.kind === 'jacuzzi' ? st.orders.filter(missOpen) : [], tr = truckHtml();
-    box.hidden = !list.length && !tr; if (!list.length) { box.innerHTML = tr; return; }
+    var box = $('alerts'), list = canSend() && st.kind === 'jacuzzi' ? st.orders.filter(missOpen) : [], tr = truckHtml(), ur = urgentBox();
+    box.hidden = !list.length && !tr && !ur; if (!list.length) { box.innerHTML = ur + tr; return; }
     var todo = list.filter(function (o) { return !tubSent(o); }), sent = list.filter(tubSent);
     function line(o) { return '<li><button type="button" class="alink" data-open="' + esc(o.id) + '">' + esc(titleOf(o)) + (o.tubNum ? ' · סידורי ' + esc(o.tubNum) : '') + ' · ' + esc(omodel(o)) + '</button> <span class="who">' + (tubSent(o) ? 'עלתה למשאית ' + fmt(o.tubMissing.sentAt) : 'מ-' + fmt((o.tubMissing && o.tubMissing.at) || (o.rcvKit && o.rcvKit.at) || o.stageAt)) + '</span>' + (tubSent(o) ? '' : ' <span class="who">· תעבור כשהנהג יסרוק את המדבקה</span>') + '</li>'; }
-    box.innerHTML = (todo.length ? '<div class="alert bad"><strong>צריך לשלוח אמבטיה לברקן (' + todo.length + ')</strong><ul>' + todo.map(line).join('') + '</ul></div>' : '') +
+    box.innerHTML = ur + (todo.length ? '<div class="alert bad"><strong>צריך לשלוח אמבטיה לברקן (' + todo.length + ')</strong><ul>' + todo.map(line).join('') + '</ul></div>' : '') +
       (sent.length ? '<div class="alert"><strong>אמבטיות שעלו למשאית ועוד לא נסרקו בברקן (' + sent.length + ')</strong><ul>' + sent.map(line).join('') + '</ul></div>' : '') + tr;
   }
   function rcvHtml(o) {
@@ -924,7 +953,7 @@
         '<div class="row"><button class="btn ' + (danger ? 'danger' : 'primary') + ' big" type="button" data-cf="1">' + esc(okText) + '</button><button class="btn big" type="button" data-cf="0">ביטול</button></div></div>';
       box.hidden = false;
       var prev = document.activeElement;
-      function done(v) { box.hidden = true; box.innerHTML = ''; document.removeEventListener('keydown', key); box.onclick = null; if (prev && prev.focus) try { prev.focus(); } catch (e) {} resolve(v); }
+      function done(v) { ask.vals = {}; box.querySelectorAll('input, select, textarea').forEach(function (e) { if (e.id) ask.vals[e.id] = e.value; }); box.hidden = true; box.innerHTML = ''; document.removeEventListener('keydown', key); box.onclick = null; if (prev && prev.focus) try { prev.focus(); } catch (e) {} resolve(v); }
       function key(ev) { if (ev.key === 'Escape') done(false); }
       document.addEventListener('keydown', key);
       box.onclick = function (ev) { var b = ev.target.closest('[data-cf]'); if (b) done(b.dataset.cf === '1'); else if (ev.target === box) done(false); };
@@ -1006,6 +1035,14 @@
       ask('האמבטיה נשלחה לברקן?', orderLine(o) + '<p>ההזמנה תישאר ברשימת המעקב עד שבברקן יאשרו שהאמבטיה התקבלה.</p>', 'כן, נשלחה').then(function (ok) {
         if (ok) write(o.id, function () { var m = Object.assign({}, o.tubMissing, { sentAt: new Date().toISOString(), sentBy: me.email, sentName: me.name || me.email }); return col.doc(o.id).update({ tubMissing: m }); }); });
     })(o);
+    else if (d.urg && (o = find(d.urg))) (function (o) {
+      ask('דחוף לברקן', orderLine(o) + '<p>ההזמנה תופיע בראש הרשימה ובתיבה "דחוף לברקן", ושלומי יתבקש לעדכן מתי היא יוצאת מברקן.</p><label class="f" for="urgNeed">צריך עד (לא חובה)<input id="urgNeed" type="date" value="' + esc((o.urgent && o.urgent.need) || '') + '"></label>', 'סימון כדחוף').then(function (ok) {
+        if (!ok) return; var need = (ask.vals && ask.vals.urgNeed) || '';
+        write(o.id, function () { return col.doc(o.id).update({ urgent: { need: need, at: new Date().toISOString(), by: me.email, byName: me.name || me.email } }); }); });
+    })(o);
+    else if (d.unurg && (o = find(d.unurg))) write(o.id, function () { return col.doc(o.id).update({ urgent: null }); });
+    else if (d.eta && (o = find(d.eta))) { var ev3 = $('eta-' + o.id).value; if (!ev3) return; document.activeElement && document.activeElement.blur();
+      write(o.id, function () { return col.doc(o.id).update({ bkEta: { date: ev3, at: new Date().toISOString(), by: me.email, byName: me.name || me.email } }); }); }
     else if (d.rcvundo && (o = find(d.rcvundo))) (function (o, part) {
       ask('ביטול הקבלה', orderLine(o) + '<p>' + (part === 'rcvTub' ? 'האמבטיה' : 'הקיט') + ' יסומן שוב כ"עוד לא התקבל".</p>', 'כן, לבטל').then(function (ok) { if (!ok) return; var x = {}; x[part] = null; write(o.id, function () { return col.doc(o.id).update(x); }); });
     })(o, d.part);

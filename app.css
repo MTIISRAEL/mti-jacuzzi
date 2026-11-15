@@ -371,3 +371,9 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 .scanres.ok { border-color: var(--ok); background: var(--ok-bg); }
 .scanres.bad { border-color: var(--bad); background: var(--bad-bg); }
 @media print { #printArea .p-sec { font-size: 14pt; margin: 12pt 0 6pt; } }
+/* urgent orders and Barkan's promised date */
+.chip.urgent { background: var(--bad) !important; color: #fff !important; border-color: var(--bad) !important; font-weight: 700; }
+.alert.urgent { border-color: var(--bad); background: var(--bad-bg); }
+.etarow { align-items: center; flex-wrap: wrap; }
+.etarow input { font: inherit; font-size: 16px; min-height: 44px; border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 10px; background: var(--surface); color: var(--ink); }
+.modal-body .f input { display: block; margin-top: 6px; font: inherit; font-size: 16px; min-height: 44px; border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 10px; }
