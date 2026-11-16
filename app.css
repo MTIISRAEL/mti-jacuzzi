@@ -206,6 +206,12 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 
 /* ---- kit order ---- */
 .kitbox { display: flex; flex-direction: column; gap: 8px; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px; }
+.kitsent { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.kitsent > strong { flex: 0 0 auto; }
+.kitsent .row { margin-inline-start: auto; }
+.kitmore { flex: 1 1 100%; order: 3; }
+.kitmore summary { cursor: pointer; font-size: 13.5px; color: var(--muted); }
+.kitmore[open] summary { margin-bottom: 6px; }
 .kitbox .st { font-size: 13.5px; color: var(--muted); }
 .kitbox input { font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 40px; min-width: 0; flex: 1 1 120px; }
 .kitbox input.qty { flex: 0 0 64px; text-align: center; }

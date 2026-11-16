@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261116-091353';
+  var APP_VERSION = '20261116-093439';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -701,8 +701,12 @@
       h += '<div class="kitbox"><strong>רשימת הקיט להכנה</strong><ul class="kitlist">' + kitNow(o).map(function (x) { return '<li><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + skuHtml(x) + '</span></li>'; }).join('') + '</ul>' +
         '<div class="row"><button class="btn" type="button" data-kitprint="' + id + '">הורדת PDF / הדפסה</button></div></div>';
     } else if (o.kitList && o.kitList.length && IDX[k] >= IDX[TR.kitFrom] && IDX[k] <= IDX[TR.kitTo]) {
-      h += '<div class="kitbox"><strong>' + (k === TR.kitFrom && kindOf(o) === 'spa' ? 'רשימת הקיט להכנה' : 'הקיט שנשלח') + '</strong>' +
+      // once the kit has left, the list stays folded: only the download button, the items open on request
+      var prep = k === TR.kitFrom && kindOf(o) === 'spa';
+      h += '<div class="kitbox' + (prep ? '' : ' kitsent') + '"><strong>' + (prep ? 'רשימת הקיט להכנה' : 'הקיט שנשלח') + '</strong>' +
+        (prep ? '' : '<details class="kitmore"><summary>' + o.kitList.length + ' פריטים, להצגה</summary>') +
         '<ul class="kitlist">' + o.kitList.map(function (x) { return '<li><span class="q">' + esc(x.q) + '</span><span class="n">' + esc(x.n) + skuHtml(x) + '</span></li>'; }).join('') + '</ul>' +
+        (prep ? '' : '</details>') +
         '<div class="row"><button class="btn" type="button" data-kitprint="' + id + '">הורדת PDF / הדפסה</button></div></div>';
     }
     return h;
