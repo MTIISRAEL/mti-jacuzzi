@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261116-093709';
+  var APP_VERSION = '20261116-094315';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -266,6 +266,7 @@
     if (b.dataset.shipclose) { st.shipOpen = false; render(); }
     else if (b.dataset.shipgo) shipGo();
     else if (b.dataset.shiplist) printLoadList();
+    else if (b.dataset.rcv) onAct(ev);
     else if (b.dataset.kitready && (o = find(b.dataset.kitready))) write(o.id, function () { return col.doc(o.id).update({ kitReady: { at: new Date().toISOString(), by: me.email, byName: me.name || me.email } }); });
   });
   $('logoutBtn').addEventListener('click', logout); $('logoutBtn2').addEventListener('click', logout);
@@ -651,7 +652,9 @@
       else if (wait) v = '<span class="who">' + wait + '</span>';
       else v = can ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '"' + busy + '>' + btn + '</button>' +
         (key === 'rcvTub' ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '" data-stock="1"' + busy + '>יש במלאי בברקן</button>' +
-          (missOpen(o) ? '' : '<button class="btn danger" type="button" data-tubmiss="' + id + '"' + busy + '>האמבטיה לא התקבלה</button>') : '') : '<span class="who">עוד לא התקבל</span>';
+          (missOpen(o) ? '' : '<button class="btn danger" type="button" data-tubmiss="' + id + '"' + busy + '>האמבטיה לא התקבלה</button>') : '') :
+        // the office may say the tub is taken from Barkan's own stock (Shlomi keeps some there); only receipt from Ashdod stays Shlomi's
+        '<span class="who">עוד לא התקבל</span>' + (key === 'rcvTub' && isOffice() ? ' <button class="btn small" type="button" data-rcv="' + id + '" data-part="rcvTub" data-stock="1"' + busy + '>יש במלאי בברקן</button>' : '');
       if (key === 'rcvTub' && !r && missOpen(o)) v += '<div class="tubmiss">' + missLine(o) + '</div>';
       var lc = o[(key === 'rcvTub' ? 'tub' : 'kit') + 'Loc'];
       if (!r && lc && lc.at === 'truckB') v = '<span class="rcv-truck">🚚 על המשאית לברקן · ' + fmt(lc.t) + (lc.byName ? ' · ' + esc(lc.byName) : '') + '</span>' + v;
@@ -932,7 +935,7 @@
     st.ship = st.ship || {};
     var rows = shipRows(), n = 0;
     var h = '<div class="ship-head"><h2>יוצא לברקן</h2><button class="btn small" type="button" data-shipclose="1">סגירה</button></div>' +
-      '<p class="who">מסמנים מה עלה על המשאית ולוחצים "הועמס, יצא לברקן". קיט שליאור אמר שמוכן מסמנים "קיט מוכן", והוא עולה לראש הרשימה.</p>';
+      '<p class="who">מסמנים מה עלה על המשאית ולוחצים "הועמס, יצא לברקן". קיט שליאור אמר שמוכן מסמנים "קיט מוכן", והוא עולה לראש הרשימה. אמבטיה ששלומי לוקח מהמלאי שלו בברקן מסמנים "במלאי בברקן", והיא יוצאת מהרשימה.</p>';
     if (!rows.length) h += '<div class="state">אין כרגע ג\'קוזים שמחכים לנסיעה לברקן.</div>';
     else h += '<div class="ship-list">' + rows.map(function (r) {
       var o = r.o, sel = st.ship[o.id] || {}, id = esc(o.id);
@@ -941,7 +944,7 @@
         : o.kitReady ? '<span class="chip ok">קיט מוכן · ' + fmt(o.kitReady.at) + '</span>' : (r.kit ? '<button class="btn small" type="button" data-kitready="' + id + '">קיט מוכן</button>' : '');
       return '<div class="ship-row' + (o.urgent ? ' urg' : '') + '"><div class="ship-who"><b>' + esc(o.tubNum || '—') + '</b> · ' + esc(omodel(o)) + (o.urgent ? ' <span class="chip urgent">דחוף</span>' : '') + '<div class="who">' + esc(titleOf(o)) + (o.num ? ' · הזמנה ' + esc(o.num) : '') + '</div></div>' +
         '<div class="ship-pick">' +
-        (r.tub ? '<label class="chk"><input type="checkbox" data-ship="' + id + '" data-part="tub"' + (sel.tub ? ' checked' : '') + '>אמבטיה</label>' : '<span class="who">אמבטיה: ' + (o.rcvTub ? 'בברקן' : 'על המשאית') + '</span>') +
+        (r.tub ? '<label class="chk"><input type="checkbox" data-ship="' + id + '" data-part="tub"' + (sel.tub ? ' checked' : '') + '>אמבטיה</label><button class="btn small" type="button" data-rcv="' + id + '" data-part="rcvTub" data-stock="1">במלאי בברקן</button>' : '<span class="who">אמבטיה: ' + (o.rcvTub ? (o.rcvTub.stock ? 'מהמלאי בברקן' : 'בברקן') : 'על המשאית') + '</span>') +
         (r.kit ? '<label class="chk"><input type="checkbox" data-ship="' + id + '" data-part="kit"' + (sel.kit ? ' checked' : '') + '>קיט</label>' : '') + kitState + '</div></div>';
     }).join('') + '</div>';
     h += '<div class="row"><button class="btn primary big" type="button" data-shipgo="1"' + (n ? '' : ' disabled') + '>הועמס, יצא לברקן' + (n ? ' (' + n + ')' : '') + '</button><button class="btn" type="button" data-shiplist="1">רשימת העמסה להיום</button></div>';
