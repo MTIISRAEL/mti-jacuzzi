@@ -52,7 +52,9 @@ window.Sketch = (function () {
     button:  { grey: ['כפתור הפעלה שטוח BALBOA ניקל', '48170'], white: ['כפתור הפעלה שטוח BALBOA לבן', '48180'] },
     suction: { grey: ['יניקה 1.5" BALBOA ניקל', '48270'], white: ['יניקה 1.5" BALBOA לבן', '48280'] },
     air:     ['וסת אוויר BALBOA ניקל', '48070'],
-    light:   ['פנס תאורה קומפלט לג\'קוזי 7 צבעים LED', '48660']
+    light:   ['פנס תאורה קומפלט לג\'קוזי 7 צבעים LED', '48660'],
+    // the bigger 5" light (the spa one), a choice instead of the regular light
+    light5:  ['פנס 5" לספא - 7 צבעים', '48670']
   };
   var MOTOR_SKU = { 'WPPE120': '40480', 'JA120': '40120', 'JA150': '40150', 'JA200': '40200', 'WP-300-I': '40300', 'WP-300-II': '40320' };
 
@@ -131,7 +133,7 @@ window.Sketch = (function () {
 
     // Jets come in two sizes, 2" and 3". Drawings saved before sizes existed count as 3".
     function jsize(it) { return it.size === 2 ? 2 : 3; }
-    function nameOf(it) { return it.type === 'jet' ? "ג'ט " + jsize(it) + '"' : TYPES[it.type].name; }
+    function nameOf(it) { return it.type === 'jet' ? "ג'ט " + jsize(it) + '"' : it.type === 'light' && it.size === 5 ? 'פנס 5"' : TYPES[it.type].name; }
     function status(it) {
       if (!it.std) return 'added';
       if (it.type === 'jet' && it.std.size && jsize(it) !== it.std.size) return 'moved';
@@ -154,6 +156,7 @@ window.Sketch = (function () {
         if (ST.w) return '<rect x="' + (-ST.w / 2) + '" y="' + (-ST.h / 2) + '" width="' + ST.w + '" height="' + ST.h + '" rx="2" fill="' + ST.c + '" stroke="#fff" stroke-width=".5"/>' + (small ? '' : '<text class="t-lbl" style="font-size:2.6px" text-anchor="middle" y="0.9" fill="#fff">' + esc(ST.name.replace('פאנל ', '')) + '</text>');
         return '<circle r="' + ST.r + '" fill="' + ST.c + '" stroke="#fff" stroke-width="' + (ST.r > 3 ? .6 : .35) + '"/><circle r="' + (ST.r * 0.35) + '" fill="rgba(255,255,255,.55)"/>';
       }
+      if (t === 'light' && it.size === 5) return '<circle r="3.6" fill="#fff6cf" stroke="#b8860b" stroke-width=".7"/><circle r="1.6" fill="#f2b705"/><path d="M0 -3V-2.2M0 3V2.2M-3 0H-2.2M3 0H2.2" stroke="#b8860b" stroke-width=".45"/>' + (small ? '' : '<text class="t-lbl" style="font-size:3.2px" text-anchor="middle" y="6.6" fill="var(--ink, #222)">פנס 5"</text>');
       if (t === 'light') return '<circle r="2.6" fill="#fff6cf" stroke="#b8860b" stroke-width=".6"/><circle r="1.1" fill="#f2b705"/><path d="M0 -2.1V-1.5M0 2.1V1.5M-2.1 0H-1.5M2.1 0H1.5" stroke="#b8860b" stroke-width=".4"/>' + tag;
       if (t === 'mled') return '<circle r="1.3" fill="#fff1a8" stroke="#b8860b" stroke-width=".45"/><circle r=".5" fill="#f2b705"/>';
       if (t === 'pillow') return '<rect x="-15" y="-4.5" width="30" height="9" rx="4" fill="#4a4e55" stroke="#22252a" stroke-width=".5"/>' +
@@ -266,6 +269,7 @@ window.Sketch = (function () {
         '<div class="row"><div class="nudge" aria-label="הזזה עדינה"><button class="btn" type="button" data-n="-1,0" aria-label="שמאלה">←</button><button class="btn" type="button" data-n="0,-1" aria-label="למעלה">↑</button>' +
         '<button class="btn" type="button" data-n="0,1" aria-label="למטה">↓</button><button class="btn" type="button" data-n="1,0" aria-label="ימינה">→</button></div>' +
         (it.type === 'pillow' ? '<button class="btn" type="button" data-act="rot">סיבוב 90°</button>' : '') +
+        (it.type === 'light' ? '<button class="btn" type="button" data-act="lsize">' + (it.size === 5 ? 'החלף לפנס רגיל' : 'החלף לפנס 5"') + '</button>' : '') +
         (it.type === 'jet' ? '<button class="btn" type="button" data-act="size">החלף ל-' + (jsize(it) === 2 ? 3 : 2) + '"</button>' : '') +
         (st === 'moved' ? '<button class="btn" type="button" data-act="back">החזר למקום</button>' : '') + '<button class="btn danger" type="button" data-act="del">הסר</button></div>');
     }
@@ -324,7 +328,7 @@ window.Sketch = (function () {
       $('skPalWrap').hidden = readOnly;
       var nj = S.items.filter(function (i) { return i.type === 'jet' || /^s_j/.test(i.type); }).length;
       $('skPalWrap').querySelector('h2').textContent = 'הוספת פריט' + (jetsStd ? " · ג'טים: " + nj + ' מתוך ' + jetsStd : " · ג'טים: " + nj);
-      $('skPal').innerHTML = (SPA ? Object.keys(TYPES).filter(function (k) { return TYPES[k].spa; }).map(function (k) { return [k]; }) : [['jet', 2], ['jet', 3], ['light'], ['mled'], ['pillow'], ['faucet'], ['shower'], ['service'], ['reg'], ['btn']]).map(function (p) {
+      $('skPal').innerHTML = (SPA ? Object.keys(TYPES).filter(function (k) { return TYPES[k].spa; }).map(function (k) { return [k]; }) : [['jet', 2], ['jet', 3], ['light'], ['light', 5], ['mled'], ['pillow'], ['faucet'], ['shower'], ['service'], ['reg'], ['btn']]).map(function (p) {
         var t = p[0], demo = { type: t, size: p[1] }, have = S.items.filter(function (i) { return i.type === t; }).length, full = have >= (t === 'light' ? 1 : TYPES[t].max || 99);
         var vb = t === 'service' ? '-22 -8 44 16' : t === 'pillow' ? '-16 -16 32 32' : t === 'motor' ? '-13 -10 26 20' : TYPES[t].spa ? (TYPES[t].w ? (-TYPES[t].w / 2 - 1) + ' ' + (-TYPES[t].w / 2 - 1) + ' ' + (TYPES[t].w + 2) + ' ' + (TYPES[t].w + 2) : (-TYPES[t].r - 1) + ' ' + (-TYPES[t].r - 1) + ' ' + (2 * TYPES[t].r + 2) + ' ' + (2 * TYPES[t].r + 2)) : '-5 -5 10 10';
         return '<button class="btn" type="button" data-add="' + t + '"' + (p[1] ? ' data-size="' + p[1] + '"' : '') + (full ? ' disabled' : '') + '><svg viewBox="' + vb + '" aria-hidden="true">' + symbol(demo, true) + '</svg><span>' + nameOf(demo) + '</span></button>'; }).join('');
@@ -394,6 +398,7 @@ window.Sketch = (function () {
       var b = ev.target.closest('button'), it = find(selId); if (!b || !it || readOnly) return;
       if (b.dataset.n) { var d = b.dataset.n.split(','); place(it, it.x + (+d[0]), it.y + (+d[1])); }
       else if (b.dataset.act === 'size') { it.size = jsize(it) === 2 ? 3 : 2; }
+      else if (b.dataset.act === 'lsize') { if (it.size === 5) delete it.size; else it.size = 5; }
       else if (b.dataset.act === 'rot') { it.rot = it.rot ? 0 : 90; place(it, it.x, it.y); }
       else if (b.dataset.act === 'back') { it.x = it.std.x; it.y = it.std.y; if (it.std.side) it.side = it.std.side; if (it.std.size) it.size = it.std.size; }
       else if (b.dataset.act === 'del') removeItem(it);
@@ -403,6 +408,7 @@ window.Sketch = (function () {
       var b = ev.target.closest('button[data-add]'); if (!b || b.disabled || readOnly) return;
       var t = b.dataset.add, n = S.items.filter(function (i) { return i.type === t && !i.std; }).length, it = { id: 'a' + (++uid), type: t, x: 0, y: 0, std: null };
       if (t === 'jet') it.size = b.dataset.size === '2' ? 2 : 3;
+      if (t === 'light' && b.dataset.size === '5') it.size = 5;
       if (t === 'light') S.light = true;
       if (t === 'faucet') place(it, W * 0.74 - n * 9, 3.6);
       else if (t === 'shower') place(it, W * 0.83 - n * 9, 3.6);
@@ -469,7 +475,8 @@ window.Sketch = (function () {
     out.push({ n: PARTS.air[0], q: 2, sku: PARTS.air[1] });
     // with a light there are two control buttons (pump + light), without it one
     out.push({ n: PARTS.button[f][0], q: data.light === true ? 2 : 1, sku: PARTS.button[f][1] });
-    if (data.light === true) out.push({ n: PARTS.light[0], q: 1, sku: PARTS.light[1] });
+    var big = (data.items || []).some(function (i) { return i.type === 'light' && i.size === 5; }), lp = big ? PARTS.light5 : PARTS.light;
+    if (data.light === true) out.push({ n: lp[0], q: 1, sku: lp[1] });
     if (c.mled) out.push({ n: 'מערכת מיני לד (12 נורות) 7 צבעים כולל בקר+מאריכים · ' + c.mled + ' נקודות בשרטוט', q: Math.ceil(c.mled / 12), sku: '48666' });
     [2, 3].forEach(function (z) { if (!c['jet' + z]) return;
       if (data.series === 'prime') out.push({ n: "ג'ט " + z + '" PRIME (CMP) מתכוונן', q: c['jet' + z], sku: PARTS.prime[z] });
