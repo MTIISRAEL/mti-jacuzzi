@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261116-080752';
+  var APP_VERSION = '20261116-090341';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -633,10 +633,11 @@
   }
   function rcvHtml(o) {
     if (!rcvOn(o)) return '';
-    var id = esc(o.id), can = canWrite() && canAct(STAGES[IDX.toBarkan]), busy = st.busy[o.id] ? ' disabled' : '', kitOut = IDX[o.stage] >= IDX.toBarkan;
+    // only Barkan marks what arrived there; managers can still undo a wrong mark
+    var id = esc(o.id), can = me.role === 'barkan', canUndo = can || isAdmin(), busy = st.busy[o.id] ? ' disabled' : '', kitOut = IDX[o.stage] >= IDX.toBarkan;
     function row(key, label, btn, wait) {
       var r = o[key], v;
-      if (r) v = '<span class="rcv-ok">✓ ' + (r.fix ? 'לא נדרש (חזרה לתיקון)' : (r.stock ? 'מהמלאי בברקן' : key === 'rcvTub' ? 'התקבלה מאשדוד' : 'התקבל') + ' · ' + fmt(r.at) + (r.byName ? ' · ' + esc(r.byName) : '')) + '</span>' + (can && !r.fix ? ' <button class="btn small" type="button" data-rcvundo="' + id + '" data-part="' + key + '"' + busy + '>ביטול</button>' : '');
+      if (r) v = '<span class="rcv-ok">✓ ' + (r.fix ? 'לא נדרש (חזרה לתיקון)' : (r.stock ? 'מהמלאי בברקן' : key === 'rcvTub' ? 'התקבלה מאשדוד' : 'התקבל') + ' · ' + fmt(r.at) + (r.byName ? ' · ' + esc(r.byName) : '')) + '</span>' + (canUndo && !r.fix ? ' <button class="btn small" type="button" data-rcvundo="' + id + '" data-part="' + key + '"' + busy + '>ביטול</button>' : '');
       else if (wait) v = '<span class="who">' + wait + '</span>';
       else v = can ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '"' + busy + '>' + btn + '</button>' +
         (key === 'rcvTub' ? '<button class="btn primary" type="button" data-rcv="' + id + '" data-part="' + key + '" data-stock="1"' + busy + '>יש במלאי בברקן</button>' +
@@ -823,8 +824,10 @@
     if (me.role === 'agent') { scanUi.rows.unshift({ cls: '', head: head, text: who + '<br>' + esc(scanState(o, s.p)) }); renderScan(); return; }
     var acts = scanActs(o, s.p), mine = acts.filter(function (a) { return a.who.indexOf(me.role) > -1; });
     if (!acts.length) { scanUi.rows.unshift({ cls: 'warn', head: head, text: who + '<br>' + esc(scanState(o, s.p)) }); beep(false); renderScan(); return; }
-    if (!mine.length && (isAdmin() || me.role === 'office')) { // choose what happened
+    if (!mine.length && (isAdmin() || me.role === 'office')) acts = acts.filter(function (a) { return a.k !== 'atB'; }); // arrival in Barkan is Shlomi's scan only
+    if (!mine.length && (isAdmin() || me.role === 'office') && acts.length) { // choose what happened
       scanUi.rows.unshift({ cls: 'ask', head: head, text: who + '<br>מה קרה עם ה' + PART_N[s.p] + '?', choices: acts, o: o, p: s.p }); beep(true); renderScan(); return; }
+    if (!acts.length) acts = [{ who: ['barkan'] }];
     if (!mine.length) { scanUi.rows.unshift({ cls: 'warn', head: head, text: who + '<br>' + esc(scanState(o, s.p)) + '<br>הסריקה הבאה צפויה אצל: ' + acts.map(function (a) { return a.who.map(function (w) { return ROLES[w]; }).join(' / '); }).join(' או ') }); beep(false); renderScan(); return; }
     runAct({ cls: 'ok', head: head, who: who, o: o, p: s.p }, mine[0]);
   }
