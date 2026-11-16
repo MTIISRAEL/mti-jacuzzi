@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261116-093439';
+  var APP_VERSION = '20261116-093709';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -920,7 +920,7 @@
   // Lior tells the office which kits are ready, Tzachi loads Avi's truck and asks for delivery notes:
   // at that moment the office ticks what went on the truck and presses one button.
   function shipRows() {
-    return st.all.filter(function (o) { return kindOf(o) === 'jacuzzi' && o.stage !== 'delivered' && IDX[o.stage] <= IDX.toBarkan; }).map(function (o) {
+    return st.all.filter(function (o) { return kindOf(o) === 'jacuzzi' && o.stage !== 'delivered' && IDX[o.stage] >= IDX.kit && IDX[o.stage] <= IDX.toBarkan; }).map(function (o) {
       var tub = !o.rcvTub && !(o.tubLoc && o.tubLoc.at === 'truckB'), kit = (o.stage === 'kit' || o.stage === 'toBarkan') && !o.rcvKit && !(o.kitLoc && o.kitLoc.at === 'truckB');
       return { o: o, tub: tub, kit: kit };
     }).filter(function (r) { return r.tub || r.kit; }).sort(function (a, b) {
