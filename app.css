@@ -377,3 +377,14 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 .etarow { align-items: center; flex-wrap: wrap; }
 .etarow input { font: inherit; font-size: 16px; min-height: 44px; border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 10px; background: var(--surface); color: var(--ink); }
 .modal-body .f input { display: block; margin-top: 6px; font: inherit; font-size: 16px; min-height: 44px; border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+/* the office's "leaving for Barkan" panel */
+.ship-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ship-head h2 { margin: 0; }
+.ship-list { display: flex; flex-direction: column; gap: 6px; }
+.ship-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.ship-row.urg { border-color: var(--bad); }
+.ship-who { min-width: 0; flex: 1 1 220px; font-size: 16px; }
+.ship-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.ship-pick .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 600; min-height: 44px; }
+.ship-pick .chk input { width: 22px; height: 22px; }
+.ship-sum { margin: 0 0 8px; padding-inline-start: 18px; }

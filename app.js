@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261116-090341';
+  var APP_VERSION = '20261116-091353';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -20,8 +20,8 @@
   ];
   // stages that were merged on 12 Nov 2026: an order still standing on one is read as standing on the merged stage
   var SCAN_HINT = {
-    kit: 'עובר לבד כשהנהג סורק את מדבקת הקיט בעלייה למשאית.',
-    toBarkan: 'עובר לאיבזור כשבברקן סורקים את מדבקת האמבטיה ואת מדבקת הקיט.'
+    kit: 'עובר ל"בדרך לברקן" כשהמשרד מסמן במסך "יוצא לברקן" שהקיט הועמס.',
+    toBarkan: 'עובר לאיבזור כששלומי מסמן כאן שהאמבטיה והקיט התקבלו בברקן.'
   };
   var J_OLD = { request: 'drawing', kitOrder: 'kit', waitBarkan: 'fitting', pack: 'inspect', ready: 'delivered' };
   var J_OLD_N = { ready: 'מוכן לאספקה', request: 'בקשת אספקה', kitOrder: 'הזמנת קיט למחסן', waitBarkan: 'ממתין לאיבזור בברקן', pack: 'אריזה מחדש' };
@@ -259,6 +259,15 @@
   function logout() { unsub.forEach(function (u) { u(); }); unsub = []; me = null; auth.signOut(); }
   $('scanBtn').addEventListener('click', function () { openScanner(); });
   $('loadListBtn').addEventListener('click', printLoadList);
+  $('shipBtn').addEventListener('click', function () { st.shipOpen = !st.shipOpen; st.form = false; st.usersOpen = false; render(); if (st.shipOpen) window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  $('shipPanel').addEventListener('change', function (ev) { var c = ev.target.closest('input[data-ship]'); if (!c) return; st.ship = st.ship || {}; var x = st.ship[c.dataset.ship] || (st.ship[c.dataset.ship] = {}); x[c.dataset.part] = c.checked;
+    var n = 0; Object.keys(st.ship).forEach(function (k) { n += (st.ship[k].tub ? 1 : 0) + (st.ship[k].kit ? 1 : 0); }); var g = $('shipPanel').querySelector('[data-shipgo]'); if (g) { g.disabled = !n; g.textContent = 'הועמס, יצא לברקן' + (n ? ' (' + n + ')' : ''); } });
+  $('shipPanel').addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (!b) return; var o;
+    if (b.dataset.shipclose) { st.shipOpen = false; render(); }
+    else if (b.dataset.shipgo) shipGo();
+    else if (b.dataset.shiplist) printLoadList();
+    else if (b.dataset.kitready && (o = find(b.dataset.kitready))) write(o.id, function () { return col.doc(o.id).update({ kitReady: { at: new Date().toISOString(), by: me.email, byName: me.name || me.email } }); });
+  });
   $('logoutBtn').addEventListener('click', logout); $('logoutBtn2').addEventListener('click', logout);
 
   auth.onAuthStateChanged(async function (u) {
@@ -551,9 +560,9 @@
     if (a && ($('list').contains(a) || $('side').contains(a) || $('usersPanel').contains(a) || ($('sketchView').querySelector('#skExtra') || $('list')).contains(a)) && (a.tagName === 'INPUT')) { pending = true; return; }
     pending = false;
     var now = new Date();
-    $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); $('scanBtn').hidden = me.role === 'agent'; $('loadListBtn').hidden = !isOffice(); $('scanBtn').className = 'btn ' + (me.role === 'driver' || me.role === 'barkan' ? 'primary' : 'small'); applyKind();
+    $('newBtn').hidden = !isOffice(); $('usersBtn').hidden = !isAdmin(); $('scanBtn').hidden = me.role === 'agent'; $('loadListBtn').hidden = !isOffice(); $('shipBtn').hidden = !isOffice() || st.kind !== 'jacuzzi'; $('scanBtn').className = 'btn ' + (me.role === 'driver' || me.role === 'barkan' ? 'primary' : 'small'); applyKind();
     $('banner').hidden = me.role !== 'agent'; if (me.role === 'agent') $('banner').textContent = 'תצוגה בלבד: כאן רואים איפה כל ' + TR.word + ' של הלקוחות שלך ומתי הוא צפוי לרדת.';
-    renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderAlerts(); renderList(now); renderSide(now); refreshSketchSend();
+    renderTiles(now); renderFilters(); renderForm(); renderUsers(); renderAlerts(); renderShip(); renderList(now); renderSide(now); refreshSketchSend();
     $('foot').textContent = st.loaded ? 'ימי עבודה: א\'–ה\'. חריגה מסומנת כשהזמנה נשארת בשלב יותר מהזמן שהוקצב לו.' : '';
   }
   document.addEventListener('focusout', function () { if (pending) setTimeout(render, 0); });
@@ -578,6 +587,7 @@
   function bkEtaLate(o) { return o.bkEta && o.bkEta.date && IDX[o.stage] <= IDX.loadBk && o.bkEta.date < new Date().toISOString().slice(0, 10); }
   function urgentChips(o) {
     var h = '';
+    if (o.kitReady && o.stage === 'kit') h += '<span class="chip ok">קיט מוכן</span>';
     if (o.urgent && o.stage !== 'delivered') h += '<span class="chip urgent">דחוף' + (o.urgent.need ? ' · עד ' + dmy(o.urgent.need) : '') + '</span>';
     if (o.bkEta && o.bkEta.date && inBarkan(o)) h += '<span class="chip' + (bkEtaLate(o) ? ' late' : '') + '">יוצא מברקן: ' + dmy(o.bkEta.date) + '</span>';
     return h;
@@ -772,6 +782,7 @@
     if (to && o.stage === 'kit') u.kitList = kitNow(o).map(function (x) { return { n: x.n, q: x.q, sku: x.sku || '', done: false }; });
     if (to) { var e2 = event(to, note); if (who) { e2.at = who.t; e2.by = ''; e2.byName = who.name; } u.stage = to; u.stageAt = e2.at; u.hold = null; u.history = (o.history || []).concat([e2]); }
     var prev = {}; Object.keys(u).forEach(function (key) { prev[key] = o[key] === undefined ? null : o[key]; });
+    scanApply.lastU = u;
     return col.doc(o.id).update(u).then(function () { return prev; });
   }
   // Loaders scan without an account: the phone only drops a note in scans/ (it cannot read or change orders).
@@ -900,6 +911,52 @@
       (list.length ? table('loadB', 'אשדוד ← ברקן') + table('loadA', 'ברקן ← אשדוד') : '<p>היום עוד לא נסרק שום דבר בעלייה למשאית.</p>') +
       '<p class="p-notes">לפי הסריקות של היום עד ' + hm(d.toISOString()) + '.</p>';
     var t = document.title; document.title = 'רשימת העמסה ' + date; window.print(); document.title = t;
+  }
+  // ---------- "leaving for Barkan": the office marks what was loaded, instead of scanning ----------
+  // Lior tells the office which kits are ready, Tzachi loads Avi's truck and asks for delivery notes:
+  // at that moment the office ticks what went on the truck and presses one button.
+  function shipRows() {
+    return st.all.filter(function (o) { return kindOf(o) === 'jacuzzi' && o.stage !== 'delivered' && IDX[o.stage] <= IDX.toBarkan; }).map(function (o) {
+      var tub = !o.rcvTub && !(o.tubLoc && o.tubLoc.at === 'truckB'), kit = (o.stage === 'kit' || o.stage === 'toBarkan') && !o.rcvKit && !(o.kitLoc && o.kitLoc.at === 'truckB');
+      return { o: o, tub: tub, kit: kit };
+    }).filter(function (r) { return r.tub || r.kit; }).sort(function (a, b) {
+      return (!!b.o.kitReady - !!a.o.kitReady) || (!!b.o.urgent - !!a.o.urgent) || (IDX[b.o.stage] - IDX[a.o.stage]) || String(a.o.tubNum || '').localeCompare(String(b.o.tubNum || ''));
+    });
+  }
+  function renderShip() {
+    var p = $('shipPanel'); p.hidden = !st.shipOpen; if (!st.shipOpen) { p.innerHTML = ''; return; }
+    st.ship = st.ship || {};
+    var rows = shipRows(), n = 0;
+    var h = '<div class="ship-head"><h2>יוצא לברקן</h2><button class="btn small" type="button" data-shipclose="1">סגירה</button></div>' +
+      '<p class="who">מסמנים מה עלה על המשאית ולוחצים "הועמס, יצא לברקן". קיט שליאור אמר שמוכן מסמנים "קיט מוכן", והוא עולה לראש הרשימה.</p>';
+    if (!rows.length) h += '<div class="state">אין כרגע ג\'קוזים שמחכים לנסיעה לברקן.</div>';
+    else h += '<div class="ship-list">' + rows.map(function (r) {
+      var o = r.o, sel = st.ship[o.id] || {}, id = esc(o.id);
+      if (sel.tub && r.tub) n++; if (sel.kit && r.kit) n++;
+      var kitState = o.stage !== 'kit' && o.stage !== 'toBarkan' ? '<span class="who">הקיט עוד לא בהכנה (' + esc(STAGES[IDX[o.stage]].n) + ')</span>'
+        : o.kitReady ? '<span class="chip ok">קיט מוכן · ' + fmt(o.kitReady.at) + '</span>' : (r.kit ? '<button class="btn small" type="button" data-kitready="' + id + '">קיט מוכן</button>' : '');
+      return '<div class="ship-row' + (o.urgent ? ' urg' : '') + '"><div class="ship-who"><b>' + esc(o.tubNum || '—') + '</b> · ' + esc(omodel(o)) + (o.urgent ? ' <span class="chip urgent">דחוף</span>' : '') + '<div class="who">' + esc(titleOf(o)) + (o.num ? ' · הזמנה ' + esc(o.num) : '') + '</div></div>' +
+        '<div class="ship-pick">' +
+        (r.tub ? '<label class="chk"><input type="checkbox" data-ship="' + id + '" data-part="tub"' + (sel.tub ? ' checked' : '') + '>אמבטיה</label>' : '<span class="who">אמבטיה: ' + (o.rcvTub ? 'בברקן' : 'על המשאית') + '</span>') +
+        (r.kit ? '<label class="chk"><input type="checkbox" data-ship="' + id + '" data-part="kit"' + (sel.kit ? ' checked' : '') + '>קיט</label>' : '') + kitState + '</div></div>';
+    }).join('') + '</div>';
+    h += '<div class="row"><button class="btn primary big" type="button" data-shipgo="1"' + (n ? '' : ' disabled') + '>הועמס, יצא לברקן' + (n ? ' (' + n + ')' : '') + '</button><button class="btn" type="button" data-shiplist="1">רשימת העמסה להיום</button></div>';
+    p.innerHTML = h;
+  }
+  function shipGo() {
+    var rows = shipRows(), picks = [];
+    rows.forEach(function (r) { var sel = (st.ship || {})[r.o.id] || {}, parts = []; if (sel.tub && r.tub) parts.push('tub'); if (sel.kit && r.kit) parts.push('kit'); if (parts.length) picks.push({ o: r.o, parts: parts }); });
+    if (!picks.length) return;
+    ask('הועמס, יצא לברקן', '<ul class="ship-sum">' + picks.map(function (x) { return '<li><b>' + esc(x.o.tubNum || '—') + '</b> · ' + esc(omodel(x.o)) + ' · ' + x.parts.map(function (p) { return PART_N[p]; }).join(' + ') + '</li>'; }).join('') + '</ul><p class="who">הכול יסומן "על המשאית לברקן". קיט שיוצא עובר ל"בדרך לברקן".</p>', 'כן, הועמס').then(function (ok) {
+      if (!ok) return;
+      var chain = Promise.resolve();
+      picks.forEach(function (x) { chain = chain.then(function () {
+        var o = x.o, step = Promise.resolve();
+        x.parts.slice().sort().reverse().forEach(function (p) { step = step.then(function () { return scanApply(o, p, 'loadB').then(function () { o = Object.assign({}, o, scanApply.lastU); }); }); }); // tub first, then kit
+        return step.then(function () { delete st.ship[x.o.id]; });
+      }); });
+      chain.then(function () { render(); }, function () { $('banner').hidden = false; $('banner').textContent = 'חלק מהסימונים לא נשמרו. בדקו את החיבור ונסו שוב.'; render(); });
+    });
   }
   // stickers: 100 x 150 mm, portrait, one per page
   function stickerHtml(o, p) {
