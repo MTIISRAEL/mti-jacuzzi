@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261118-114019';
+  var APP_VERSION = '20261118-114425';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -667,7 +667,8 @@
   function rcvHtml(o) {
     if (!rcvOn(o)) return '';
     // only Barkan marks what arrived there; managers can still undo a wrong mark
-    var id = esc(o.id), can = me.role === 'barkan', canUndo = can || isAdmin(), busy = st.busy[o.id] ? ' disabled' : '', kitOut = IDX[o.stage] >= IDX.toBarkan;
+    // Meir may also mark it, standing in for Shlomi when he is busy
+    var id = esc(o.id), can = me.role === 'barkan' || String(me.email).toLowerCase() === 'mti.israel.ltd@gmail.com', canUndo = can || isAdmin(), busy = st.busy[o.id] ? ' disabled' : '', kitOut = IDX[o.stage] >= IDX.toBarkan;
     function row(key, label, btn, wait) {
       var r = o[key], v;
       if (r) v = '<span class="rcv-ok">✓ ' + (r.fix ? 'לא נדרש (חזרה לתיקון)' : (r.stock ? 'מהמלאי בברקן' : key === 'rcvTub' ? 'התקבלה מאשדוד' : 'התקבל') + ' · ' + fmt(r.at) + (r.byName ? ' · ' + esc(r.byName) : '')) + '</span>' + (canUndo && !r.fix ? ' <button class="btn small" type="button" data-rcvundo="' + id + '" data-part="' + key + '"' + busy + '>ביטול</button>' : '');
