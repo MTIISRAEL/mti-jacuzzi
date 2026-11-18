@@ -324,6 +324,8 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 /* tubs Barkan did not receive: a follow-up list for the office and the Ashdod warehouse */
 .alerts { display: flex; flex-direction: column; gap: 8px; }
 .alert { border: 1.5px solid var(--warn); background: var(--warn-bg); border-radius: 12px; padding: 10px 12px; }
+.alert.ap-ok { border-color: var(--ok); background: var(--ok-bg); }
+.apnote { flex: 1 1 100%; font-size: 14px; color: var(--ink); }
 .alert.bad { border-color: var(--bad); background: var(--bad-bg); }
 .alert ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .alert li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

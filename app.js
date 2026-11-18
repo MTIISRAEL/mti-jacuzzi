@@ -1,6 +1,6 @@
 // MTI jacuzzi tracking board. Sign-in with Google, a role per email, one card per order moving through the stations.
 (function () {
-  var APP_VERSION = '20261116-094315';
+  var APP_VERSION = '20261118-114019';
   var auth = firebase.auth(), db = firebase.firestore();
 
   // Stage targets are working days (Sun–Thu). Loading and arrival are recorded by scanning the QR stickers,
@@ -298,7 +298,7 @@
       if (SCAN_ARG && !st.scanDone) { st.scanDone = true; try { history.replaceState(null, '', location.pathname); } catch (e) {} handleScan(SCAN_ARG); }
     }, function () { st.err = 'לא הצלחנו לטעון את ההזמנות. בדקו את החיבור ופתחו שוב.'; render(); }));
     if (me.role !== 'agent') unsub.push(apCol.where('status', 'in', ['approved', 'changes']).onSnapshot(function (snap) {
-      st.appr = {}; snap.docs.forEach(function (d) { var a = d.data(); a.token = d.id; if (a.orderId) st.appr[a.orderId] = a; });
+      st.appr = {}; st.apprAll = []; snap.docs.forEach(function (d) { var a = d.data(); a.token = d.id; if (a.orderId) { st.appr[a.orderId] = a; st.apprAll.push(a); } });
       if (isOffice()) snap.docs.forEach(function (d) { var a = d.data(); if (a.status === 'approved' && a.orderId) autoApprove(a.orderId, d.id, a); });
       render();
     }, function () {}));
@@ -634,8 +634,30 @@
   function missLine(o) { var m = o.tubMissing || {};
     var head = m.at ? '⚠ ברקן סימנו שהאמבטיה לא התקבלה · ' + fmt(m.at) + (m.byName ? ' · ' + esc(m.byName) : '') : '⚠ הקיט כבר בברקן והאמבטיה עוד לא התקבלה' + (o.rcvKit && o.rcvKit.at ? ' · הקיט התקבל ' + fmt(o.rcvKit.at) : '');
     return head + (m.sentAt ? '<br>נסרקה בעלייה למשאית · ' + fmt(m.sentAt) + (m.sentName ? ' · ' + esc(m.sentName) : '') + ' · מחכים לאישור קבלה בברקן' : ''); }
+  // Customers who answered the sketch link: shown to the office until someone presses "ראיתי" (seenAt on the approval).
+  // Only answers from the last week, so older approvals from before this box existed don't flood it.
+  function apNews() {
+    if (!isOffice()) return [];
+    function find(id) { return st.all.find(function (o) { return o.id === id; }); }
+    var since = Date.now() - 7 * 864e5;
+    return (st.apprAll || []).filter(function (a) { var o = find(a.orderId); return !a.seenAt && o && kindOf(o) === st.kind && a.token === o.approvalToken && new Date(a.answeredAt || 0).getTime() > since; })
+      .sort(function (a, b) { return String(b.answeredAt).localeCompare(String(a.answeredAt)); });
+  }
+  function apBox() {
+    function find(id) { return st.all.find(function (o) { return o.id === id; }); }
+    var l = apNews(); setTitleCount(l.length); if (!l.length) return '';
+    var ok = l.filter(function (a) { return a.status === 'approved'; }), ch = l.filter(function (a) { return a.status === 'changes'; });
+    function line(a) { var o = find(a.orderId);
+      return '<li><button type="button" class="alink" data-open="' + esc(o.id) + '">' + (o.tubNum ? esc(o.tubNum) + ' · ' : '') + esc(omodel(o)) + ' · ' + esc(titleOf(o)) + '</button> <span class="who">' + fmt(a.answeredAt) + (a.answeredName ? ' · ' + esc(a.answeredName) : '') + '</span>' +
+        ' <button class="btn small" type="button" data-apseen="' + esc(a.token) + '">ראיתי</button>' +
+        (a.status === 'changes' && a.comment ? '<div class="apnote">"' + esc(a.comment) + '"</div>' : '') + '</li>'; }
+    return (ok.length ? '<div class="alert ap-ok"><strong>לקוחות שאישרו סקיצה (' + ok.length + ')</strong><ul>' + ok.map(line).join('') + '</ul></div>' : '') +
+      (ch.length ? '<div class="alert"><strong>לקוחות שביקשו שינוי בסקיצה (' + ch.length + ')</strong><ul>' + ch.map(line).join('') + '</ul></div>' : '');
+  }
+  // the browser tab shows how many answers wait, e.g. "(2) MTI"
+  function setTitleCount(n) { var base = document.title.replace(/^\(\d+\) /, ''); document.title = (n ? '(' + n + ') ' : '') + base; }
   function renderAlerts() {
-    var box = $('alerts'), list = canSend() && st.kind === 'jacuzzi' ? st.orders.filter(missOpen) : [], tr = truckHtml(), ur = urgentBox();
+    var box = $('alerts'), list = canSend() && st.kind === 'jacuzzi' ? st.orders.filter(missOpen) : [], tr = truckHtml(), ur = apBox() + urgentBox();
     box.hidden = !list.length && !tr && !ur; if (!list.length) { box.innerHTML = ur + tr; return; }
     var todo = list.filter(function (o) { return !tubSent(o); }), sent = list.filter(tubSent);
     function line(o) { return '<li><button type="button" class="alink" data-open="' + esc(o.id) + '">' + esc(titleOf(o)) + (o.tubNum ? ' · סידורי ' + esc(o.tubNum) : '') + ' · ' + esc(omodel(o)) + '</button> <span class="who">' + (tubSent(o) ? 'עלתה למשאית ' + fmt(o.tubMissing.sentAt) : 'מ-' + fmt((o.tubMissing && o.tubMissing.at) || (o.rcvKit && o.rcvKit.at) || o.stageAt)) + '</span>' + (tubSent(o) ? '' : ' <span class="who">· תעבור כשהנהג יסרוק את המדבקה</span>') + '</li>'; }
@@ -1071,6 +1093,7 @@
     }
     var b = ev.target.closest('button'); if (!b || b.disabled) return; var d = b.dataset;
     if (d.reload) { hardReload(); return; }
+    if (d.apseen) { b.disabled = true; apCol.doc(d.apseen).update({ seenAt: new Date().toISOString(), seenBy: me.email, seenByName: me.name || me.email }).catch(function () { b.disabled = false; }); return; }
     if (d.savetub && (o = find(d.savetub))) { var tv = $('tn-' + o.id).value.trim(), spaSer = kindOf(o) === 'spa'; if (!(spaSer ? /^\d{1,8}$/ : /^\d{4}$/).test(tv)) { $('banner').hidden = false; $('banner').textContent = spaSer ? 'מספר סידורי הוא ספרות בלבד.' : 'מספר סידורי הוא 4 ספרות.'; return; } document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ tubNum: tv }); }); }
     else if (d.savecontact && (o = find(d.savecontact))) { var P = d.pfx || '', pv = $(P + 'ph-' + o.id).value.trim(), em = $(P + 'em-' + o.id).value.trim(); document.activeElement && document.activeElement.blur(); write(o.id, function () { return col.doc(o.id).update({ phone: pv, custEmail: em }); }); }
     else if (d.copy && (o = find(d.copy))) { var link = custLink(o); (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function () { b.textContent = 'הקישור הועתק'; }, function () { b.outerHTML = '<input readonly dir="ltr" value="' + esc(link) + '" onfocus="this.select()">'; }); }
